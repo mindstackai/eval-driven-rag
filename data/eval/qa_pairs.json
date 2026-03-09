@@ -1,0 +1,20 @@
+[
+  {
+    "id": "q001",
+    "question": "What is the recommended maintenance interval for fleet vehicles?",
+    "relevant_chunk_ids": ["doc_001_chunk_1"],
+    "reference_answer": "Fleet vehicles should undergo routine maintenance every 5,000 miles or 3 months, whichever comes first."
+  },
+  {
+    "id": "q002",
+    "question": "How should fuel consumption anomalies be reported?",
+    "relevant_chunk_ids": ["doc_002_chunk_3"],
+    "reference_answer": "Fuel consumption anomalies exceeding 15% of the baseline should be reported to the fleet manager via the incident reporting form within 24 hours."
+  },
+  {
+    "id": "q003",
+    "question": "What are the requirements for driver certification in the fleet program?",
+    "relevant_chunk_ids": ["doc_003_chunk_2"],
+    "reference_answer": "Drivers must hold a valid commercial license, complete a 4-hour safety orientation, and pass an annual defensive driving assessment to remain certified in the fleet program."
+  }
+]

@@ -1,0 +1,20 @@
+# Chunking & Retrieval
+chunk_size: 800
+chunk_overlap: 120
+top_k: 4
+index_path: ./vectorstore/faiss_index
+
+# Embedding Configuration
+embedding:
+  mode: auto          # auto | openai | openai-legacy | local
+  batch_size: 100
+
+# Incremental Indexing
+incremental:
+  enabled: true
+  tracker_path: ./vectorstore/document_tracker.json
+
+# LanceDB (alternative vector store)
+lancedb:
+  db_path: ./vectorstore/lancedb
+  table_name: fleet_chunks

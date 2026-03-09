@@ -212,7 +212,9 @@ cp .env.example .env
 python -m src.ingest
 
 # 5. Run the app
-streamlit run src/app.py
+bash run.sh
+# Or directly:
+# KMP_DUPLICATE_LIB_OK=TRUE PYTHONPATH=. streamlit run src/app.py
 
 # 6. Run evals
 python -m src.eval.run_eval --qa_pairs data/eval/qa_pairs.json --k 5

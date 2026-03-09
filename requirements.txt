@@ -1,0 +1,30 @@
+# Core LangChain ecosystem
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-openai>=0.1.0
+langchain-huggingface>=0.0.3
+
+# Vector search
+faiss-cpu>=1.7.4
+
+# LanceDB (alternative vector store)
+lancedb>=0.3.0
+
+# Embeddings (local + OpenAI fallback)
+sentence-transformers>=2.7.0
+torch>=2.4.0
+
+# Document loaders
+pypdf>=4.2.0
+
+# Tokenization + utils
+tiktoken>=0.7.0
+python-dotenv>=1.0.1
+PyYAML
+
+# UI
+streamlit>=1.36.0
+
+# Data analysis
+numpy>=1.24.0
+pandas
