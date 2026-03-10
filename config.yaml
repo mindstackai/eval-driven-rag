@@ -1,8 +1,32 @@
 # Chunking & Retrieval
 chunk_size: 800
 chunk_overlap: 120
+chunking_strategy: recursive   # recursive | fixed | semantic | sentence
 top_k: 4
 index_path: ./vectorstore/faiss_index
+
+# Doc-type Profiles
+# Set a profile to use preset chunk_size, chunk_overlap, and chunking_strategy.
+# Explicit values above override profile defaults.
+# profile: general            # general | legal | medical | faq  (uncomment to activate)
+
+profiles:
+  general:
+    chunk_size: 800
+    chunk_overlap: 120
+    chunking_strategy: recursive
+  legal:
+    chunk_size: 1500
+    chunk_overlap: 300
+    chunking_strategy: recursive
+  medical:
+    chunk_size: 1000
+    chunk_overlap: 200
+    chunking_strategy: semantic
+  faq:
+    chunk_size: 400
+    chunk_overlap: 50
+    chunking_strategy: sentence
 
 # Embedding Configuration
 embedding:
@@ -13,6 +37,12 @@ embedding:
 incremental:
   enabled: true
   tracker_path: ./vectorstore/document_tracker.json
+
+# SLO Thresholds
+slo:
+  e2e_p95_ms: 5000
+  retriever_p95_ms: 500
+  llm_p95_ms: 4000
 
 # LanceDB (alternative vector store)
 lancedb:

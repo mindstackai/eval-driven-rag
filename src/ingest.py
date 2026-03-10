@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 load_dotenv()
+import hashlib
 import os
 from pathlib import Path
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
@@ -10,6 +11,20 @@ from src.config_manager import get_config
 from src.document_tracker import DocumentTracker
 
 RAW_DIR = Path("data/raw")
+
+
+def assign_chunk_ids(chunks: list[Document]) -> list[Document]:
+    """Assign deterministic chunk_id to each document based on source, page, and content.
+
+    IDs are stable across re-indexing as long as the content doesn't change.
+    Works with any vector store (FAISS, LanceDB, etc.).
+    """
+    for i, doc in enumerate(chunks):
+        source = doc.metadata.get("source", "unknown")
+        page = doc.metadata.get("page", 0)
+        content_hash = hashlib.md5(doc.page_content.encode()).hexdigest()[:8]
+        doc.metadata["chunk_id"] = f"{source}:p{page}:c{i}:{content_hash}"
+    return chunks
 
 def load_docs():
     docs = []
@@ -102,6 +117,7 @@ def main():
         # Split into chunks
         splitter = make_text_splitter(config._config)
         chunks = splitter.split_documents(docs)
+        assign_chunk_ids(chunks)
         print(f"Split into {len(chunks)} chunks")
         print()
 
@@ -141,6 +157,7 @@ def main():
 
         splitter = make_text_splitter(config._config)
         chunks = splitter.split_documents(docs)
+        assign_chunk_ids(chunks)
         print(f"Loaded {len(docs)} docs -> {len(chunks)} chunks")
         print()
 

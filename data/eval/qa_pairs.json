@@ -1,20 +1,71 @@
 [
   {
     "id": "q001",
-    "question": "What is the recommended maintenance interval for fleet vehicles?",
-    "relevant_chunk_ids": ["doc_001_chunk_1"],
-    "reference_answer": "Fleet vehicles should undergo routine maintenance every 5,000 miles or 3 months, whichever comes first."
+    "question": "What is the average precision score of the hybrid quantum model compared to XGBoost in the fraud detection study?",
+    "relevant_chunk_ids": [
+      "data/raw/2603.06473v1.pdf:p0:c2:7b36109b",
+      "data/raw/2603.06473v1.pdf:p6:c52:d6e3de82"
+    ],
+    "reference_answer": "The hybrid quantum-classical architecture achieves average precision scores of 0.793±0.085 compared to 0.770±0.065 of XGBoost on 3 repeated 5-fold cross-validation benchmarks."
   },
   {
     "id": "q002",
-    "question": "How should fuel consumption anomalies be reported?",
-    "relevant_chunk_ids": ["doc_002_chunk_3"],
-    "reference_answer": "Fuel consumption anomalies exceeding 15% of the baseline should be reported to the fleet manager via the incident reporting form within 24 hours."
+    "question": "What dataset was used for the credit card fraud detection experiments?",
+    "relevant_chunk_ids": [
+      "data/raw/2603.06473v1.pdf:p5:c44:9c622ab1"
+    ],
+    "reference_answer": "A publicly available European credit card fraud dataset of transactions from September 2013 by European cardholders was used."
   },
   {
     "id": "q003",
-    "question": "What are the requirements for driver certification in the fleet program?",
-    "relevant_chunk_ids": ["doc_003_chunk_2"],
-    "reference_answer": "Drivers must hold a valid commercial license, complete a 4-hour safety orientation, and pass an annual defensive driving assessment to remain certified in the fleet program."
+    "question": "What encoding method is used to map classical data into the quantum circuit?",
+    "relevant_chunk_ids": [
+      "data/raw/2603.06473v1.pdf:p2:c19:3a901645",
+      "data/raw/2603.06473v1.pdf:p2:c21:0fa5d563"
+    ],
+    "reference_answer": "Angle encoding is used, where rotations on the Y-axis of qubits encode the features of the data into quantum space."
+  },
+  {
+    "id": "q004",
+    "question": "What is the role of the router in the Mixture-of-Experts fraud detection framework?",
+    "relevant_chunk_ids": [
+      "data/raw/2603.06473v1.pdf:p4:c37:77cb2d20",
+      "data/raw/2603.06473v1.pdf:p5:c43:91141b8f"
+    ],
+    "reference_answer": "The router (an XGBoost classifier) dynamically decides for each input whether to use the primary classical model or the secondary quantum model, based on a user-controlled threshold parameter."
+  },
+  {
+    "id": "q005",
+    "question": "What algorithms are used for movie recommendation in the Netflix study?",
+    "relevant_chunk_ids": [
+      "data/raw/2602.24125v1.pdf:p5:c105:c88cba6b",
+      "data/raw/2602.24125v1.pdf:p0:c90:f32bc032"
+    ],
+    "reference_answer": "XGBoost regression, K-Nearest Neighbors, and Matrix Factorization (MF) algorithms from Python's Surprise library are used, along with collaborative filtering techniques."
+  },
+  {
+    "id": "q006",
+    "question": "How is user-user similarity computed in the movie recommendation system?",
+    "relevant_chunk_ids": [
+      "data/raw/2602.24125v1.pdf:p9:c114:d9d7d4e5"
+    ],
+    "reference_answer": "A user-user similarity matrix of size nXn is computed where n is the number of users, using cosine similarity to determine how similar users are based on their rating patterns."
+  },
+  {
+    "id": "q007",
+    "question": "What was the Netflix Challenge prize and its goal?",
+    "relevant_chunk_ids": [
+      "data/raw/2602.24125v1.pdf:p1:c95:a0860c46"
+    ],
+    "reference_answer": "Netflix organized a competition on Kaggle.com with a prize of $1 million for improving recommendation accuracy by 10%."
+  },
+  {
+    "id": "q008",
+    "question": "What evaluation metric is used to compare recommendation algorithm performance?",
+    "relevant_chunk_ids": [
+      "data/raw/2602.24125v1.pdf:p13:c124:72c7329e",
+      "data/raw/2602.24125v1.pdf:p13:c125:f970e48e"
+    ],
+    "reference_answer": "Root Mean Square Error (RMSE) and Mean Absolute Percentage Error (MAPE) are used to evaluate and compare the recommendation algorithms."
   }
 ]

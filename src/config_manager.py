@@ -2,6 +2,8 @@ import os
 import yaml
 from pathlib import Path
 
+from src.splitters import resolve_chunking_config
+
 
 class Config:
     def __init__(self, cfg: dict):
@@ -11,6 +13,7 @@ class Config:
         if mode == "auto":
             mode = "openai" if os.getenv("OPENAI_API_KEY") else "local"
         self.embedding_mode = mode
+        self._chunking = resolve_chunking_config(cfg)
 
     def get(self, key, default=None):
         return self._config.get(key, default)
@@ -41,8 +44,12 @@ class Config:
         print("=== Configuration ===")
         print(f"  Embedding mode : {self.embedding_mode}")
         print(f"  Index path     : {self.get_index_path()}")
-        print(f"  Chunk size     : {self._config.get('chunk_size', 800)}")
-        print(f"  Chunk overlap  : {self._config.get('chunk_overlap', 120)}")
+        profile = self._config.get("profile")
+        if profile:
+            print(f"  Profile        : {profile}")
+        print(f"  Strategy       : {self._chunking['chunking_strategy']}")
+        print(f"  Chunk size     : {self._chunking['chunk_size']}")
+        print(f"  Chunk overlap  : {self._chunking['chunk_overlap']}")
         print(f"  Top-k          : {self._config.get('top_k', 4)}")
         print(f"  Incremental    : {self.is_incremental_enabled()}")
         print()
