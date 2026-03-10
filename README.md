@@ -85,16 +85,24 @@ eval-driven-rag/
 │   ├── 02_retrieval_eval.ipynb     # eval framework walkthrough
 │   └── 03_lancedb_vs_faiss.ipynb   # vector store comparison
 │
+├── eval/
+│   ├── ground_truth.json           # labeled Q&A pairs for two-phase eval
+│   ├── cache/                      # cached LLM responses (Phase 2)
+│   └── results/                    # eval results (JSON per run)
+│
 ├── src/
 │   ├── ingest.py                   # load → split → embed → store
 │   ├── splitters.py                # chunking strategies
 │   ├── embed_store.py              # vector store build/load
 │   ├── retriever.py                # retriever abstraction
+│   ├── tracing.py                  # EvalTrace span instrumentation
 │   ├── app.py                      # Streamlit RAG UI
+│   ├── eval_retrieval.py           # Phase 1: retrieval eval (no LLM)
+│   ├── eval_generation.py          # Phase 2: generation eval (LLM)
 │   │
 │   ├── vectorstore/
 │   │   ├── faiss_store.py          # FAISS implementation
-│   │   └── lancedb_store.py        # LanceDB implementation (NEW)
+│   │   └── lancedb_store.py        # LanceDB implementation
 │   │
 │   └── eval/
 │       ├── __init__.py
@@ -166,11 +174,113 @@ A small labeled dataset — even 15-20 pairs is enough to catch regressions.
 ```json
 [
   {
-    "question": "What is the maintenance schedule for vehicle class A?",
-    "relevant_chunk_ids": ["doc_001_chunk_3", "doc_001_chunk_4"],
-    "reference_answer": "Vehicle class A requires quarterly maintenance..."
+    "question": "What encoding method is used to map classical data into the quantum circuit?",
+    "relevant_chunk_ids": ["data/raw/2603.06473v1.pdf:p2:c19:3a901645"],
+    "reference_answer": "Angle encoding is used, where rotations on the Y-axis of qubits encode the features."
   }
 ]
+```
+
+---
+
+## Two-Phase Eval System
+
+A systematic approach to finding the best chunking config for your documents.
+
+### Phase 1: Retrieval Eval (no LLM, local only)
+
+Tests multiple chunk sizes, re-ingests docs for each, and ranks by retrieval quality.
+
+```bash
+# Run with defaults from config.yaml
+python -m src.eval_retrieval
+
+# Custom ground truth file
+python -m src.eval_retrieval --ground_truth eval/ground_truth.json
+
+# Save output to file while still printing to screen
+python -m src.eval_retrieval 2>&1 | tee eval/results/phase1_log.txt
+```
+
+**What it does:**
+1. For each chunk size in `eval.chunk_sizes_to_test` (default: [128, 256, 512, 1024]):
+   - Re-chunks all documents with that size
+   - Builds a temporary FAISS index
+   - Runs retrieval for each ground truth question
+   - Uses content-based matching (not exact chunk ID) so it works across chunk sizes
+2. Calculates Hit Rate, MRR, and Recall@k per config
+3. Saves per-config results to `eval/results/retrieval_{chunk_size}_{timestamp}.json`
+4. Prints a ranked summary table
+
+**Example output:**
+```
+========================================================================
+ Phase 1: Retrieval Eval Summary (ranked by Hit Rate)
+========================================================================
+  Rank   Chunk Size   Chunks   Hit Rate   MRR        Recall@4
+------------------------------------------------------------------------
+  1      512          227      0.8750     0.6979     0.7500
+  2      128          1323     0.7500     0.6250     0.6875
+  3      256          602      0.7500     0.5938     0.6250
+  4      1024         109      0.7500     0.6875     0.6250
+========================================================================
+```
+
+### Phase 2: Generation Eval (LLM, top configs only)
+
+Takes the best chunk configs from Phase 1 and evaluates full RAG generation quality.
+
+```bash
+# Run with defaults (top 2 configs from Phase 1)
+python -m src.eval_generation
+
+# Evaluate top 3 configs instead
+python -m src.eval_generation --top_n 3
+
+# Save output to file
+python -m src.eval_generation 2>&1 | tee eval/results/phase2_log.txt
+```
+
+**What it does:**
+1. Reads Phase 1 results and takes top N configs by hit rate
+2. For each config: rebuilds index, runs full RAG with LLM for each question
+3. Caches LLM responses in `eval/cache/` (key = hash of question + retrieved chunks)
+4. Scores each answer on correctness, faithfulness, and relevance
+5. Saves results to `eval/results/generation_{chunk_size}_{timestamp}.json`
+
+**Example output:**
+```
+==========================================================================================
+ Phase 2: Generation Eval Summary (ranked by Correctness)
+==========================================================================================
+  Rank   Chunk    Chunks   Correct    Faithful   Relevant   HitRate    MRR
+------------------------------------------------------------------------------------------
+  1      512      227      0.7500     1.0000     0.8375     0.8750     0.6979
+  2      256      602      0.6125     0.8750     0.8125     0.7500     0.5938
+==========================================================================================
+```
+
+### Ground Truth Format (`eval/ground_truth.json`)
+
+```json
+[
+  {
+    "question": "Your question here",
+    "expected_chunk_ids": ["source:pPage:cIndex:hash"],
+    "expected_answer": "The expected answer for correctness scoring."
+  }
+]
+```
+
+### Config (`config.yaml`)
+
+```yaml
+eval:
+  chunk_sizes_to_test: [128, 256, 512, 1024]
+  top_k_configs_for_generation: 2
+  cache_responses: true
+  cache_dir: eval/cache/
+  results_dir: eval/results/
 ```
 
 ---
@@ -218,6 +328,10 @@ bash run.sh
 
 # 6. Run evals
 python -m src.eval.run_eval --qa_pairs data/eval/qa_pairs.json --k 5
+
+# 7. Two-phase eval (find optimal chunk size)
+python -m src.eval_retrieval    # Phase 1: retrieval only (no LLM cost)
+python -m src.eval_generation   # Phase 2: generation quality (uses LLM)
 ```
 
 ---
@@ -237,7 +351,10 @@ See [`docs/design_decisions.md`](docs/design_decisions.md) for the full reasonin
 - [x] End-to-end RAG pipeline (ingest → retrieve → generate)
 - [x] FAISS vector store
 - [x] Streamlit UI
-- [ ] Eval framework (recall@k, MRR, faithfulness)
+- [x] Eval framework (recall@k, MRR, faithfulness)
+- [x] Two-phase eval system (retrieval + generation across chunk sizes)
+- [x] LLM response caching for eval runs
+- [x] EvalTrace integration (span tracing, latency, cost, SLO)
 - [ ] LanceDB vector store
 - [ ] BM25 + dense hybrid search
 - [ ] Cross-encoder reranker

@@ -11,6 +11,8 @@
 
 ## Running Evals
 - `python -m src.eval.run_eval --qa_pairs data/eval/qa_pairs.json --k 5`
+- `python -m src.eval_retrieval`   # Phase 1: retrieval eval across chunk sizes (no LLM)
+- `python -m src.eval_generation`  # Phase 2: generation eval on top configs (uses LLM)
 
 ## Environment
 - Use `.venv` — activate with `source .venv/bin/activate`

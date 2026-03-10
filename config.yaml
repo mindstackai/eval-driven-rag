@@ -44,6 +44,14 @@ slo:
   retriever_p95_ms: 500
   llm_p95_ms: 4000
 
+# Evaluation
+eval:
+  chunk_sizes_to_test: [128, 256, 512, 1024]
+  top_k_configs_for_generation: 2
+  cache_responses: true
+  cache_dir: eval/cache/
+  results_dir: eval/results/
+
 # LanceDB (alternative vector store)
 lancedb:
   db_path: ./vectorstore/lancedb
