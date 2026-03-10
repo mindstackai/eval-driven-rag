@@ -4,11 +4,8 @@ load_dotenv()  # load .env for OPENAI_API_KEY, PYTHONPATH etc.
 
 from src.embed_store import load_faiss
 from src.config_manager import get_config
+from src.tracing import traced_base_answer, traced_helper_answer, traced_strict_rag_answer
 from langchain_openai import ChatOpenAI
-from langchain_core.documents import Document
-from langchain_core.prompts import PromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
 
 # ---------------------------------------------------------
 # Setup
@@ -32,52 +29,6 @@ retriever = db.as_retriever(search_kwargs={"k": config.get("top_k", 3)})
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 # ---------------------------------------------------------
-# Helper functions
-# ---------------------------------------------------------
-def base_answer(query: str):
-    """LLM answers without retrieval."""
-    return llm.invoke(f"Answer concisely:\n\nQ: {query}\nA:")
-
-def helper_answer(query: str, retriever):
-    """LLM answers first, then augments with optional retrieved context."""
-    base = base_answer(query)
-
-    docs: list[Document] = retriever.invoke(query)
-    usable_docs = [d for d in docs if len(d.page_content.strip()) > 50]
-
-    if not usable_docs:
-        return {"answer": base.content, "augment": "No additional context.", "sources": []}
-
-    context_blob = "\n\n".join([f"[{i+1}] {d.page_content}" for i, d in enumerate(usable_docs)])
-    aug_prompt = f"""You already answered this question:
-
-Question: {query}
-Base answer: {base.content}
-
-Now you are given optional context (may be redundant). Only add details that are consistent and helpful.
-If nothing adds value, return 'No additional context.'
-
-Context:
-{context_blob}
-"""
-    aug = llm.invoke(aug_prompt)
-
-    return {"answer": base.content, "augment": aug.content, "sources": usable_docs}
-
-def strict_rag_answer(query: str, retriever):
-    """Classic RAG where LLM must ground answer in retrieved context."""
-    prompt = PromptTemplate.from_template(
-        "Use only the following context to answer the question. "
-        "If the answer is not in the context, say 'I don't know'.\n\n"
-        "Context:\n{context}\n\nQuestion: {question}\nAnswer:"
-    )
-    docs: list[Document] = retriever.invoke(query)
-    context = "\n\n".join(d.page_content for d in docs)
-    chain = prompt | llm | StrOutputParser()
-    answer = chain.invoke({"context": context, "question": query})
-    return {"answer": answer, "augment": None, "sources": docs}
-
-# ---------------------------------------------------------
 # UI
 # ---------------------------------------------------------
 query = st.text_input("Ask a question about your documents:")
@@ -92,11 +43,11 @@ mode = st.radio(
 if query:
     with st.spinner("Thinking..."):
         if mode == "No-RAG":
-            result = {"answer": base_answer(query).content, "augment": None, "sources": []}
+            result = traced_base_answer(query, llm)
         elif mode == "Helper-RAG":
-            result = helper_answer(query, retriever)
+            result = traced_helper_answer(query, retriever, llm)
         else:
-            result = strict_rag_answer(query, retriever)
+            result = traced_strict_rag_answer(query, retriever, llm)
 
     st.subheader("Answer")
     st.write(result["answer"])

@@ -14,6 +14,12 @@ incremental:
   enabled: true
   tracker_path: ./vectorstore/document_tracker.json
 
+# SLO Thresholds
+slo:
+  e2e_p95_ms: 5000
+  retriever_p95_ms: 500
+  llm_p95_ms: 4000
+
 # LanceDB (alternative vector store)
 lancedb:
   db_path: ./vectorstore/lancedb

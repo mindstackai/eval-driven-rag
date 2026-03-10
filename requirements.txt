@@ -28,3 +28,6 @@ streamlit>=1.36.0
 # Data analysis
 numpy>=1.24.0
 pandas
+
+# EvalTrace (span-level observability & evaluation)
+-e /Users/ywchen/projects/mindstackai/EvalTrace
