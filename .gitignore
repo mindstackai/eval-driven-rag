@@ -209,3 +209,5 @@ __marimo__/
 # Project-specific
 data/raw/*.pdf
 vectorstore/
+eval/cache/
+eval/results/*.json
