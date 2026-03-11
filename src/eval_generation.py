@@ -13,7 +13,6 @@ import argparse
 import hashlib
 import json
 import os
-import re
 import sys
 from datetime import datetime
 from glob import glob
@@ -21,9 +20,11 @@ from pathlib import Path
 
 import yaml
 
+from judge.adapters import LangChainJudgeClient
+from judge.scorers import correctness_score, faithfulness_score, relevance_score
+
 from src.ingest import load_docs, assign_chunk_ids
 from src.splitters import make_text_splitter
-from src.eval.answer_eval import faithfulness_score, answer_relevance_score
 
 
 def parse_args() -> argparse.Namespace:
@@ -131,38 +132,6 @@ Answer:"""
     return answer, retrieved_ids, context_chunks
 
 
-def _answer_correctness(answer, expected_answer, llm):
-    """Use LLM to score answer correctness against expected answer.
-
-    Returns a float in [0.0, 1.0].
-    """
-    prompt = f"""You are an evaluation assistant. Compare the generated answer to the expected answer
-and score how correct and complete the generated answer is.
-
-Expected answer:
-{expected_answer}
-
-Generated answer:
-{answer}
-
-Instructions:
-- Score 1.0 if the generated answer captures all key facts from the expected answer.
-- Score 0.0 if the generated answer is completely wrong or irrelevant.
-- Use intermediate values for partial correctness.
-- Respond with ONLY a single decimal number between 0.0 and 1.0, nothing else.
-
-Score:"""
-
-    response = llm.invoke(prompt)
-    raw = response.content.strip()
-    try:
-        score = float(raw)
-    except ValueError:
-        match = re.search(r"[0-9]+(?:\.[0-9]+)?", raw)
-        score = float(match.group()) if match else 0.0
-    return max(0.0, min(1.0, score))
-
-
 def main() -> None:
     args = parse_args()
 
@@ -209,6 +178,7 @@ def main() -> None:
     cfg_obj = get_config(args.config)
     embeddings = cfg_obj.get_embeddings()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    judge_client = LangChainJudgeClient(llm)
 
     # Load raw docs once
     print("Loading documents ...")
@@ -300,9 +270,9 @@ Answer:"""
                     })
 
             # Evaluate answer quality
-            correctness = _answer_correctness(answer, expected_answer, llm)
-            faithfulness = faithfulness_score(answer, context_chunks, llm)
-            relevance = answer_relevance_score(question, answer, llm)
+            correctness = correctness_score(answer, expected_answer, judge_client)
+            faithfulness = faithfulness_score(answer, context_chunks, judge_client)
+            relevance = relevance_score(question, answer, judge_client)
 
             per_question.append({
                 "question": question,
