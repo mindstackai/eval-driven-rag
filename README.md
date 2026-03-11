@@ -99,6 +99,20 @@ eval-driven-rag/
 │   ├── app.py                      # Streamlit RAG UI
 │   ├── eval_retrieval.py           # Phase 1: retrieval eval (no LLM)
 │   ├── eval_generation.py          # Phase 2: generation eval (LLM)
+│   ├── eval_dashboard.py           # legacy entry point (redirects to dashboard module)
+│   │
+│   ├── dashboard/                  # modular eval dashboard
+│   │   ├── __init__.py             # exports render_dashboard(results_dir, config_path)
+│   │   ├── app.py                  # standalone entry point
+│   │   ├── components/
+│   │   │   ├── sidebar.py          # filter sidebar (strategy, run, select/clear all)
+│   │   │   ├── phase1.py           # Phase 1 retrieval charts + metrics
+│   │   │   ├── phase2.py           # Phase 2 generation charts + metrics
+│   │   │   ├── comparison.py       # config comparison tables + strategy comparison
+│   │   │   └── run_eval.py         # run Phase 1/Phase 2 eval forms
+│   │   └── utils/
+│   │       ├── data_loader.py      # JSON loading + schema validation
+│   │       └── metrics.py          # chart helpers + score calculations
 │   │
 │   ├── vectorstore/
 │   │   ├── faiss_store.py          # FAISS implementation
@@ -195,6 +209,9 @@ Tests multiple chunk sizes, re-ingests docs for each, and ranks by retrieval qua
 # Run with defaults from config.yaml
 python -m src.eval_retrieval
 
+# Name your run for easy identification in the dashboard
+python -m src.eval_retrieval --name "baseline recursive strategy"
+
 # Custom ground truth file
 python -m src.eval_retrieval --ground_truth eval/ground_truth.json
 
@@ -231,8 +248,11 @@ python -m src.eval_retrieval 2>&1 | tee eval/results/phase1_log.txt
 Takes the best chunk configs from Phase 1 and evaluates full RAG generation quality.
 
 ```bash
-# Run with defaults (top 2 configs from Phase 1)
+# Run with defaults (top 4 configs from Phase 1)
 python -m src.eval_generation
+
+# Name your run
+python -m src.eval_generation --name "testing semantic generation"
 
 # Evaluate top 3 configs instead
 python -m src.eval_generation --top_n 3
@@ -277,10 +297,40 @@ python -m src.eval_generation 2>&1 | tee eval/results/phase2_log.txt
 ```yaml
 eval:
   chunk_sizes_to_test: [128, 256, 512, 1024]
-  top_k_configs_for_generation: 2
+  top_k_configs_for_generation: 4
   cache_responses: true
   cache_dir: eval/cache/
   results_dir: eval/results/
+```
+
+---
+
+## Eval Dashboard
+
+A Streamlit dashboard for visualizing eval results across chunk configs and strategies.
+
+```bash
+# Standalone
+KMP_DUPLICATE_LIB_OK=TRUE PYTHONPATH=. streamlit run src/dashboard/app.py
+
+# Or via the helper script
+bash run_dashboard.sh
+
+# Legacy entry point (still works)
+KMP_DUPLICATE_LIB_OK=TRUE PYTHONPATH=. streamlit run src/eval_dashboard.py
+```
+
+**Dashboard features:**
+- **Phase 1 & Phase 2 sections** — grouped bar charts with data labels, colored by strategy
+- **Strategy Comparison** — side-by-side metrics when multiple strategies are selected
+- **Config Comparison tables** — overall score, recommended badge, grouped by strategy
+- **Sidebar filters** — filter by strategy and eval run (uses run names, not raw timestamps)
+- **Run eval from UI** — Phase 1 and Phase 2 forms with config preview
+- **Importable** — use in your own Streamlit app:
+
+```python
+from src.dashboard import render_dashboard
+render_dashboard(results_dir="eval/results", config_path="config.yaml")
 ```
 
 ---
@@ -330,8 +380,11 @@ bash run.sh
 python -m src.eval.run_eval --qa_pairs data/eval/qa_pairs.json --k 5
 
 # 7. Two-phase eval (find optimal chunk size)
-python -m src.eval_retrieval    # Phase 1: retrieval only (no LLM cost)
-python -m src.eval_generation   # Phase 2: generation quality (uses LLM)
+python -m src.eval_retrieval --name "baseline run"    # Phase 1: retrieval only (no LLM cost)
+python -m src.eval_generation --name "baseline run"   # Phase 2: generation quality (uses LLM)
+
+# 8. View results in the dashboard
+bash run_dashboard.sh
 ```
 
 ---
@@ -355,6 +408,7 @@ See [`docs/design_decisions.md`](docs/design_decisions.md) for the full reasonin
 - [x] Two-phase eval system (retrieval + generation across chunk sizes)
 - [x] LLM response caching for eval runs
 - [x] EvalTrace integration (span tracing, latency, cost, SLO)
+- [x] Eval dashboard with strategy comparison and run naming
 - [ ] LanceDB vector store
 - [ ] BM25 + dense hybrid search
 - [ ] Cross-encoder reranker
