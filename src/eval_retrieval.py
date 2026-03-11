@@ -20,6 +20,8 @@ from datetime import datetime
 
 import yaml
 
+from metrics.overlap import text_overlap_ratio, is_content_match, content_reciprocal_rank
+
 from src.ingest import load_docs, assign_chunk_ids
 from src.splitters import make_text_splitter
 
@@ -57,19 +59,6 @@ def _build_reference_content_map(docs, config):
     return {c.metadata["chunk_id"]: c.page_content for c in chunks}
 
 
-def _text_overlap_ratio(text_a, text_b):
-    """Compute word-level overlap ratio between two texts.
-
-    Returns fraction of words in the shorter text that appear in the longer.
-    """
-    words_a = set(text_a.lower().split())
-    words_b = set(text_b.lower().split())
-    if not words_a or not words_b:
-        return 0.0
-    shorter, longer = (words_a, words_b) if len(words_a) <= len(words_b) else (words_b, words_a)
-    return len(shorter & longer) / len(shorter)
-
-
 def _build_temp_index(docs, chunk_size, chunk_overlap, chunking_strategy, embeddings):
     """Build a temporary FAISS index with the given chunking config."""
     from langchain_community.vectorstores import FAISS
@@ -85,22 +74,6 @@ def _build_temp_index(docs, chunk_size, chunk_overlap, chunking_strategy, embedd
 
     vs = FAISS.from_documents(chunks, embeddings)
     return vs, chunks
-
-
-def _is_content_hit(retrieved_text, expected_texts, threshold=0.5):
-    """Check if a retrieved chunk overlaps significantly with any expected chunk."""
-    for exp_text in expected_texts:
-        if _text_overlap_ratio(retrieved_text, exp_text) >= threshold:
-            return True
-    return False
-
-
-def _content_reciprocal_rank(retrieved_docs, expected_texts, threshold=0.5):
-    """Compute reciprocal rank using content overlap matching."""
-    for rank, doc in enumerate(retrieved_docs, start=1):
-        if _is_content_hit(doc.page_content, expected_texts, threshold):
-            return 1.0 / rank
-    return 0.0
 
 
 def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
@@ -124,18 +97,20 @@ def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
         docs = retriever.invoke(question)
         retrieved_ids = [d.metadata.get("chunk_id", "") for d in docs]
 
+        retrieved_texts = [d.page_content for d in docs]
+
         # Content-based hit: any retrieved chunk overlaps with any expected chunk
         hit = 1.0 if any(
-            _is_content_hit(d.page_content, expected_texts) for d in docs
+            is_content_match(d.page_content, expected_texts) for d in docs
         ) else 0.0
 
-        mrr = _content_reciprocal_rank(docs, expected_texts)
+        mrr = content_reciprocal_rank(retrieved_texts, expected_texts)
 
         # Content-based recall: fraction of expected chunks "covered" by retrieved
         if expected_texts:
             covered = sum(
                 1 for exp_text in expected_texts
-                if any(_text_overlap_ratio(d.page_content, exp_text) >= 0.5 for d in docs)
+                if any(text_overlap_ratio(d.page_content, exp_text) >= 0.5 for d in docs)
             )
             r_at_k = covered / len(expected_texts)
         else:
