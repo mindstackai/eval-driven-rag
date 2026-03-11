@@ -40,6 +40,12 @@ def parse_args() -> argparse.Namespace:
         default="config.yaml",
         help="Path to the config.yaml file.",
     )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default=None,
+        help="Short description/goal for this eval run (e.g. 'baseline recursive strategy').",
+    )
     return parser.parse_args()
 
 
@@ -208,6 +214,18 @@ def main() -> None:
     all_results = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+    # Determine run name
+    run_name = args.name
+    if not run_name:
+        sizes_str = "_".join(str(s) for s in chunk_sizes)
+        run_name = f"{chunking_strategy}_{sizes_str}_overlap{chunk_overlap}"
+
+    # Build display name with formatted timestamp
+    display_ts = datetime.strptime(timestamp, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M")
+    display_name = f"{run_name} ({display_ts})"
+    print(f"Run: {display_name}")
+    print()
+
     for chunk_size in chunk_sizes:
         print(f"--- Chunk size: {chunk_size} ---")
         print(f"  Building index (strategy={chunking_strategy}, overlap={chunk_overlap}) ...")
@@ -224,6 +242,8 @@ def main() -> None:
         metrics["num_chunks"] = len(chunks)
         metrics["top_k"] = top_k
         metrics["timestamp"] = timestamp
+        metrics["run_name"] = run_name
+        metrics["display_name"] = display_name
 
         all_results.append(metrics)
 
