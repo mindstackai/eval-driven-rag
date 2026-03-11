@@ -164,8 +164,9 @@ def _execute_phase2(p2_run_name, strategy_filter, top_n, results_dir, config_pat
     import yaml
     from src.ingest import load_docs, assign_chunk_ids
     from src.splitters import make_text_splitter
-    from src.eval_generation import _load_phase1_results, _cache_key, _load_cache, _save_cache, _answer_correctness
-    from src.eval.answer_eval import faithfulness_score, answer_relevance_score
+    from src.eval_generation import _load_phase1_results, _cache_key, _load_cache, _save_cache
+    from judge.adapters import LangChainJudgeClient
+    from judge.scorers import correctness_score, faithfulness_score, relevance_score
 
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -185,6 +186,7 @@ def _execute_phase2(p2_run_name, strategy_filter, top_n, results_dir, config_pat
     cfg_obj = get_config(config_path)
     embeddings = cfg_obj.get_embeddings()
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+    judge_client = LangChainJudgeClient(llm)
 
     phase1_results = _load_phase1_results(results_dir)
     if strategy_filter != "all":
@@ -267,9 +269,9 @@ Answer:"""
                         "retrieved_chunk_ids": retrieved_ids,
                     })
 
-            correctness = _answer_correctness(answer, expected_answer, llm)
-            faithfulness = faithfulness_score(answer, context_chunks, llm)
-            relevance = answer_relevance_score(question, answer, llm)
+            correctness = correctness_score(answer, expected_answer, judge_client)
+            faithfulness = faithfulness_score(answer, context_chunks, judge_client)
+            relevance = relevance_score(question, answer, judge_client)
 
             per_question.append({
                 "question": question,
