@@ -143,7 +143,7 @@ all_timestamps = sorted(
 selected_runs = st.sidebar.multiselect(
     "Eval Run (timestamp)",
     all_timestamps,
-    default=[all_timestamps[0]] if all_timestamps else [],
+    default=all_timestamps,
 )
 
 # Apply filters
@@ -152,11 +152,16 @@ if not ret_df.empty:
         ret_df["chunking_strategy"].isin(selected_strategies)
         & ret_df["timestamp"].isin(selected_runs)
     ]
+    # Keep only latest run per chunk_size for cleaner charts
+    if not ret_df.empty:
+        ret_df = ret_df.sort_values("timestamp", ascending=False).drop_duplicates(subset=["chunk_size"], keep="first")
 if not gen_df.empty:
     gen_df = gen_df[
         gen_df["chunking_strategy"].isin(selected_strategies)
         & gen_df["timestamp"].isin(selected_runs)
     ]
+    if not gen_df.empty:
+        gen_df = gen_df.sort_values("timestamp", ascending=False).drop_duplicates(subset=["chunk_size"], keep="first")
 
 # ---------------------------------------------------------
 # Phase 1: Retrieval metrics
