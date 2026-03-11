@@ -1,7 +1,7 @@
-"""Legacy entry point — redirects to src.dashboard.app.
+"""Standalone entry point for the eval dashboard.
 
 Usage:
-    KMP_DUPLICATE_LIB_OK=TRUE PYTHONPATH=. streamlit run src/eval_dashboard.py
+    KMP_DUPLICATE_LIB_OK=TRUE PYTHONPATH=. streamlit run src/dashboard/app.py
 """
 import logging
 
