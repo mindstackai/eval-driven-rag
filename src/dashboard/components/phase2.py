@@ -1,4 +1,5 @@
 """Phase 2: Generation Eval dashboard section."""
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -92,19 +93,109 @@ def render_phase2(gen_df, ret_df):
     for _, row in gen_df.iterrows():
         for q in row["per_question"]:
             raw_gen_rows.append({
-                "chunk_size": str(row["chunk_size"]),
-                "question": q["question"][:60] + "...",
+                "chunk_size": int(row["chunk_size"]),
+                "chunking_strategy": row["chunking_strategy"],
+                "question": q["question"],
+                "expected_answer": q.get("expected_answer", ""),
+                "generated_answer": q.get("generated_answer", ""),
                 "correctness": q.get("correctness", 0),
                 "faithfulness": q.get("faithfulness", 0),
                 "relevance": q.get("relevance", 0),
-                "answer_preview": q.get("generated_answer", "")[:100] + "...",
+                "retrieved_chunk_ids": q.get("retrieved_chunk_ids", []),
+                "cache_hit": q.get("cache_hit", False),
             })
     if raw_gen_rows:
         gen_pq_df = pd.DataFrame(raw_gen_rows)
-        tab1, tab2 = st.tabs(["Correctness by Question", "Data Table"])
-        with tab1:
-            pivot = gen_pq_df.pivot_table(index="question", columns="chunk_size",
-                                          values="correctness", aggfunc="mean")
-            st.bar_chart(pivot)
-        with tab2:
-            st.dataframe(gen_pq_df, use_container_width=True)
+
+        tab_heatmap, tab_detail, tab_table = st.tabs(
+            ["Score Heatmap", "Question Details", "Data Table"]
+        )
+
+        with tab_heatmap:
+            _render_score_heatmap(gen_pq_df)
+
+        with tab_detail:
+            _render_question_details(gen_pq_df)
+
+        with tab_table:
+            table_df = gen_pq_df.copy()
+            table_df["question"] = table_df["question"].str[:60] + "..."
+            table_df["answer_preview"] = table_df["generated_answer"].str[:100] + "..."
+            st.dataframe(
+                table_df[["chunk_size", "chunking_strategy", "question",
+                          "correctness", "faithfulness", "relevance", "answer_preview"]],
+                use_container_width=True,
+            )
+
+
+def _render_score_heatmap(pq_df):
+    """Render a heatmap of all 3 scores across questions × chunk sizes."""
+    melted = pq_df.melt(
+        id_vars=["chunk_size", "question"],
+        value_vars=["correctness", "faithfulness", "relevance"],
+        var_name="metric",
+        value_name="score",
+    )
+    melted["question_short"] = melted["question"].str[:50] + "..."
+    melted["chunk_size"] = melted["chunk_size"].astype(str)
+
+    heatmap = (
+        alt.Chart(melted)
+        .mark_rect()
+        .encode(
+            x=alt.X("chunk_size:N", title="Chunk Size"),
+            y=alt.Y("question_short:N", title="Question", sort=None),
+            color=alt.Color(
+                "score:Q",
+                scale=alt.Scale(scheme="redyellowgreen", domain=[0, 1]),
+                title="Score",
+            ),
+            facet=alt.Facet("metric:N", columns=3, title="Metric"),
+            tooltip=[
+                alt.Tooltip("question:N", title="Full Question"),
+                "chunk_size:N",
+                "metric:N",
+                alt.Tooltip("score:Q", format=".2f"),
+            ],
+        )
+        .properties(width=250, height=40 * min(len(pq_df["question"].unique()), 20))
+    )
+    st.altair_chart(heatmap)
+
+
+def _render_question_details(pq_df):
+    """Render per-question detail cards with full Q&A and scores."""
+    questions = pq_df["question"].unique().tolist()
+    selected_q = st.selectbox(
+        "Select a question",
+        questions,
+        format_func=lambda q: q[:80] + "..." if len(q) > 80 else q,
+    )
+
+    q_rows = pq_df[pq_df["question"] == selected_q].sort_values("chunk_size")
+
+    for _, row in q_rows.iterrows():
+        with st.expander(
+            f"chunk_size={row['chunk_size']} · {row['chunking_strategy']} — "
+            f"C={row['correctness']:.2f}  F={row['faithfulness']:.2f}  R={row['relevance']:.2f}",
+            expanded=len(q_rows) == 1,
+        ):
+            score_cols = st.columns(3)
+            score_cols[0].metric("Correctness", f"{row['correctness']:.2f}")
+            score_cols[1].metric("Faithfulness", f"{row['faithfulness']:.2f}")
+            score_cols[2].metric("Relevance", f"{row['relevance']:.2f}")
+
+            st.markdown("**Expected Answer:**")
+            st.info(row["expected_answer"] or "_not provided_")
+
+            st.markdown("**Generated Answer:**")
+            st.success(row["generated_answer"] or "_empty_")
+
+            chunk_ids = row["retrieved_chunk_ids"]
+            if chunk_ids:
+                st.markdown(f"**Retrieved Chunks** ({len(chunk_ids)}):")
+                for cid in chunk_ids:
+                    st.code(cid, language=None)
+
+            if row["cache_hit"]:
+                st.caption("(served from cache)")
