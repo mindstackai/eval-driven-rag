@@ -48,6 +48,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override number of top configs to evaluate (default from config).",
     )
+    parser.add_argument(
+        "--name",
+        type=str,
+        default=None,
+        help="Short description/goal for this eval run (e.g. 'testing insurance docs').",
+    )
     return parser.parse_args()
 
 
@@ -213,6 +219,19 @@ def main() -> None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     all_config_results = []
 
+    # Determine run name
+    run_name = args.name
+    if not run_name:
+        sizes_str = "_".join(str(c["chunk_size"]) for c in top_configs)
+        strategy = top_configs[0].get("chunking_strategy", "unknown")
+        run_name = f"gen_{strategy}_{sizes_str}"
+
+    # Build display name with formatted timestamp
+    display_ts = datetime.strptime(timestamp, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M")
+    display_name = f"{run_name} ({display_ts})"
+    print(f"Run: {display_name}")
+    print()
+
     for cfg_result in top_configs:
         chunk_size = cfg_result["chunk_size"]
         chunk_overlap = cfg_result.get("chunk_overlap", 120)
@@ -309,6 +328,8 @@ Answer:"""
             "num_chunks": len(chunks),
             "top_k": top_k,
             "timestamp": timestamp,
+            "run_name": run_name,
+            "display_name": display_name,
             "cache_hits": cache_hits,
             "avg_correctness": avg_correctness,
             "avg_faithfulness": avg_faithfulness,
