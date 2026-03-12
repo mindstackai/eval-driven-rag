@@ -78,8 +78,6 @@ def _build_temp_index(docs, chunk_size, chunk_overlap, chunking_strategy, embedd
 
 def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
     """Run retrieval eval using content-based matching."""
-    retriever = vs.as_retriever(search_kwargs={"k": k})
-
     per_question = []
     hit_rates = []
     mrr_scores = []
@@ -94,7 +92,9 @@ def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
             ref_content_map[cid] for cid in expected_ids if cid in ref_content_map
         ]
 
-        docs = retriever.invoke(question)
+        results_with_scores = vs.similarity_search_with_relevance_scores(question, k=k)
+        docs = [doc for doc, _ in results_with_scores]
+        scores = [round(score, 4) for _, score in results_with_scores]
         retrieved_ids = [d.metadata.get("chunk_id", "") for d in docs]
 
         retrieved_texts = [d.page_content for d in docs]
@@ -127,6 +127,8 @@ def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
             "hit": hit,
             "mrr": mrr,
             "recall_at_k": r_at_k,
+            "retrieval_scores": scores,
+            "mean_retrieval_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
         })
 
     n = len(ground_truth)
@@ -134,6 +136,7 @@ def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
         "hit_rate": sum(hit_rates) / n if n else 0.0,
         "mrr": sum(mrr_scores) / n if n else 0.0,
         "recall_at_k": sum(recall_scores) / n if n else 0.0,
+        "avg_retrieval_confidence": sum(q["mean_retrieval_score"] for q in per_question) / n if n else 0.0,
         "per_question": per_question,
     }
 

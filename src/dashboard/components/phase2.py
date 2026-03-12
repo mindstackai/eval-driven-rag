@@ -102,6 +102,8 @@ def render_phase2(gen_df, ret_df):
                 "faithfulness": q.get("faithfulness", 0),
                 "relevance": q.get("relevance", 0),
                 "retrieved_chunk_ids": q.get("retrieved_chunk_ids", []),
+                "retrieval_scores": q.get("retrieval_scores", []),
+                "mean_retrieval_score": q.get("mean_retrieval_score", 0),
                 "cache_hit": q.get("cache_hit", False),
             })
     if raw_gen_rows:
@@ -193,9 +195,18 @@ def _render_question_details(pq_df):
 
             chunk_ids = row["retrieved_chunk_ids"]
             if chunk_ids:
-                st.markdown(f"**Retrieved Chunks** ({len(chunk_ids)}):")
-                for cid in chunk_ids:
-                    st.code(cid, language=None)
+                scores = row.get("retrieval_scores", [])
+                mean_score = row.get("mean_retrieval_score", None)
+                if scores:
+                    min_s = min(scores)
+                    max_s = max(scores)
+                    summary = f"mean={mean_score:.4f}, min={min_s:.4f}, max={max_s:.4f}" if mean_score is not None else f"min={min_s:.4f}, max={max_s:.4f}"
+                    st.markdown(f"**Retrieved Chunks** ({len(chunk_ids)}) — {summary}:")
+                else:
+                    st.markdown(f"**Retrieved Chunks** ({len(chunk_ids)}):")
+                for i, cid in enumerate(chunk_ids):
+                    score_str = f" — score: {scores[i]:.4f}" if i < len(scores) else ""
+                    st.code(f"{cid}{score_str}", language=None)
 
             if row["cache_hit"]:
                 st.caption("(served from cache)")

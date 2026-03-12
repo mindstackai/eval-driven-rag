@@ -221,7 +221,6 @@ def main() -> None:
         chunks = splitter.split_documents(docs)
         assign_chunk_ids(chunks)
         vs = FAISS.from_documents(chunks, embeddings)
-        retriever = vs.as_retriever(search_kwargs={"k": top_k})
 
         print(f"  Built index: {len(chunks)} chunks")
 
@@ -234,7 +233,9 @@ def main() -> None:
             print(f"  [{i}/{len(ground_truth)}] {question[:55]}...")
 
             # Check cache first (retrieve to get chunk IDs for cache key)
-            ret_docs = retriever.invoke(question)
+            results_with_scores = vs.similarity_search_with_relevance_scores(question, k=top_k)
+            ret_docs = [doc for doc, _ in results_with_scores]
+            scores = [round(score, 4) for _, score in results_with_scores]
             retrieved_ids = [d.metadata.get("chunk_id", "") for d in ret_docs]
             context_chunks = [d.page_content for d in ret_docs]
             key = _cache_key(question, retrieved_ids)
@@ -279,6 +280,8 @@ Answer:"""
                 "expected_answer": expected_answer,
                 "generated_answer": answer,
                 "retrieved_chunk_ids": retrieved_ids,
+                "retrieval_scores": scores,
+                "mean_retrieval_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
                 "correctness": correctness,
                 "faithfulness": faithfulness,
                 "relevance": relevance,
@@ -304,6 +307,7 @@ Answer:"""
             "avg_correctness": avg_correctness,
             "avg_faithfulness": avg_faithfulness,
             "avg_relevance": avg_relevance,
+            "avg_retrieval_confidence": sum(q["mean_retrieval_score"] for q in per_question) / n if n else 0.0,
             "per_question": per_question,
             # Carry over Phase 1 metrics
             "phase1_hit_rate": cfg_result.get("hit_rate", 0.0),

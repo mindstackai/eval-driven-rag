@@ -98,6 +98,7 @@ def load_all_results(results_dir):
                 "hit_rate": data.get("hit_rate", 0),
                 "mrr": data.get("mrr", 0),
                 "recall_at_k": data.get("recall_at_k", 0),
+                "avg_retrieval_confidence": data.get("avg_retrieval_confidence", 0),
                 "per_question": data.get("per_question", []),
             })
             logger.info("Loaded retrieval: %s (strategy=%s, chunk_size=%s)",
@@ -121,6 +122,7 @@ def load_all_results(results_dir):
                 "cache_hits": data.get("cache_hits", 0),
                 "phase1_hit_rate": data.get("phase1_hit_rate", 0),
                 "phase1_mrr": data.get("phase1_mrr", 0),
+                "avg_retrieval_confidence": data.get("avg_retrieval_confidence", 0),
                 "per_question": data.get("per_question", []),
             })
             logger.info("Loaded generation: %s (strategy=%s, chunk_size=%s)",
