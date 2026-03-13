@@ -48,6 +48,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Short description/goal for this eval run (e.g. 'baseline recursive strategy').",
     )
+    parser.add_argument(
+        "--apply-winner",
+        action="store_true",
+        help="Automatically update config.yaml with the winning chunk size and index path.",
+    )
     return parser.parse_args()
 
 
@@ -59,8 +64,11 @@ def _build_reference_content_map(docs, config):
     return {c.metadata["chunk_id"]: c.page_content for c in chunks}
 
 
-def _build_temp_index(docs, chunk_size, chunk_overlap, chunking_strategy, embeddings):
-    """Build a temporary FAISS index with the given chunking config."""
+def _build_and_save_index(docs, chunk_size, chunk_overlap, chunking_strategy, embeddings, base_dir="vectorstore"):
+    """Build a FAISS index and save it to disk for later production use.
+
+    Indexes are saved to: {base_dir}/faiss_index_{chunk_size}/
+    """
     from langchain_community.vectorstores import FAISS
 
     cfg = {
@@ -73,7 +81,13 @@ def _build_temp_index(docs, chunk_size, chunk_overlap, chunking_strategy, embedd
     assign_chunk_ids(chunks)
 
     vs = FAISS.from_documents(chunks, embeddings)
-    return vs, chunks
+
+    # Save index to disk
+    index_path = os.path.join(base_dir, f"faiss_index_{chunk_size}")
+    os.makedirs(index_path, exist_ok=True)
+    vs.save_local(index_path)
+
+    return vs, chunks, index_path
 
 
 def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
@@ -94,7 +108,7 @@ def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
 
         results_with_scores = vs.similarity_search_with_relevance_scores(question, k=k)
         docs = [doc for doc, _ in results_with_scores]
-        scores = [round(score, 4) for _, score in results_with_scores]
+        scores = [round(float(score), 4) for _, score in results_with_scores]
         retrieved_ids = [d.metadata.get("chunk_id", "") for d in docs]
 
         retrieved_texts = [d.page_content for d in docs]
@@ -208,10 +222,11 @@ def main() -> None:
         print(f"--- Chunk size: {chunk_size} ---")
         print(f"  Building index (strategy={chunking_strategy}, overlap={chunk_overlap}) ...")
 
-        vs, chunks = _build_temp_index(
+        vs, chunks, index_path = _build_and_save_index(
             docs, chunk_size, chunk_overlap, chunking_strategy, embeddings
         )
         print(f"  {len(chunks)} chunks indexed")
+        print(f"  Index saved to: {index_path}")
 
         metrics = _run_retrieval_for_config(vs, ground_truth, top_k, ref_content_map)
         metrics["chunk_size"] = chunk_size
@@ -222,6 +237,7 @@ def main() -> None:
         metrics["timestamp"] = timestamp
         metrics["run_name"] = run_name
         metrics["display_name"] = display_name
+        metrics["index_path"] = index_path
 
         all_results.append(metrics)
 
@@ -249,6 +265,29 @@ def main() -> None:
             f"{r['hit_rate']:<10.4f} {r['mrr']:<10.4f} {r['recall_at_k']:<10.4f}"
         )
     print("=" * width)
+    print()
+
+    # Show winner and how to use it
+    winner = all_results[0]
+    print(f"Winner: chunk_size={winner['chunk_size']} (Hit Rate: {winner['hit_rate']:.4f})")
+    print(f"Index saved at: {winner['index_path']}")
+    print()
+
+    if args.apply_winner:
+        # Update config.yaml with winner
+        config["chunk_size"] = winner["chunk_size"]
+        config["index_path"] = f"./{winner['index_path']}"
+        with open(args.config, "w") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        print(f"Updated {args.config} with winning config:")
+        print(f"  chunk_size: {winner['chunk_size']}")
+        print(f"  index_path: ./{winner['index_path']}")
+    else:
+        print("To use this config in production, update config.yaml:")
+        print(f"  chunk_size: {winner['chunk_size']}")
+        print(f"  index_path: ./{winner['index_path']}")
+        print()
+        print("Or re-run with --apply-winner to auto-update config.yaml")
     print()
     print(f"Results saved to {results_dir}/")
     print("Run Phase 2 with: python -m src.eval_generation")

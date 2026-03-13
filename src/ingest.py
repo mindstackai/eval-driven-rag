@@ -6,7 +6,7 @@ from pathlib import Path
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_core.documents import Document
 from src.splitters import make_text_splitter
-from src.embed_store import build_faiss, update_faiss
+from src.embed_store import build_faiss, update_faiss, index_exists
 from src.config_manager import get_config
 from src.document_tracker import DocumentTracker
 
@@ -103,9 +103,20 @@ def main():
         docs, files_to_process, total_files = load_docs_with_tracking(tracker)
 
         if not docs:
-            print("All documents are up to date. No changes to embed.")
-            print()
-            return
+            # Check if index actually exists - tracker may be out of sync
+            if not index_exists(config.get_index_path()):
+                print("Index is missing! Resetting tracker and rebuilding...")
+                print()
+                tracker.reset()
+                old_stats = {"total_files": 0, "total_chunks": 0}
+                docs, files_to_process, total_files = load_docs_with_tracking(tracker)
+                if not docs:
+                    print("No documents found in data/raw. Add PDFs or .txt files and re-run.")
+                    return
+            else:
+                print("All documents are up to date. No changes to embed.")
+                print()
+                return
 
         print(f"Found {len(files_to_process)} new/changed files out of {total_files} total:")
         for file_path, num_docs in files_to_process[:5]:  # Show first 5

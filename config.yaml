@@ -1,15 +1,8 @@
-# Chunking & Retrieval
-chunk_size: 800
+chunk_size: 512
 chunk_overlap: 120
-chunking_strategy: recursive   # recursive | fixed | semantic | sentence
-top_k: 4
-index_path: ./vectorstore/faiss_index
-
-# Doc-type Profiles
-# Set a profile to use preset chunk_size, chunk_overlap, and chunking_strategy.
-# Explicit values above override profile defaults.
-# profile: general            # general | legal | medical | faq  (uncomment to activate)
-
+chunking_strategy: recursive
+top_k: 3
+index_path: ./vectorstore/faiss_index_512
 profiles:
   general:
     chunk_size: 800
@@ -27,32 +20,27 @@ profiles:
     chunk_size: 400
     chunk_overlap: 50
     chunking_strategy: sentence
-
-# Embedding Configuration
 embedding:
-  mode: auto          # auto | openai | openai-legacy | local
+  mode: auto
   batch_size: 100
-
-# Incremental Indexing
 incremental:
   enabled: true
   tracker_path: ./vectorstore/document_tracker.json
-
-# SLO Thresholds
 slo:
   e2e_p95_ms: 5000
   retriever_p95_ms: 500
   llm_p95_ms: 4000
-
-# Evaluation
 eval:
-  chunk_sizes_to_test: [128, 256, 512, 1024]
-  top_k_configs_for_generation: 4
+  chunk_sizes_to_test:
+  - 128
+  - 256
+  - 512
+  - 1024
+  top_k_configs_for_generation: 2
+  phase1_ranking_metric: hit_rate
   cache_responses: true
   cache_dir: eval/cache/
   results_dir: eval/results/
-
-# LanceDB (alternative vector store)
 lancedb:
   db_path: ./vectorstore/lancedb
   table_name: fleet_chunks

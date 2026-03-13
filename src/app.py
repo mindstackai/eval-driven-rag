@@ -23,6 +23,12 @@ st.sidebar.info(f"**Incremental:** {'Enabled' if config.is_incremental_enabled()
 
 # Load FAISS retriever
 db = load_faiss()
+if db is None:
+    st.error(
+        "No FAISS index found. Please ingest documents first by running:\n\n"
+        "`python -m src.ingest`"
+    )
+    st.stop()
 retriever = db.as_retriever(search_kwargs={"k": config.get("top_k", 3)})
 
 # LLM
