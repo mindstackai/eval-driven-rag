@@ -55,11 +55,21 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Short description/goal for this eval run (e.g. 'testing insurance docs').",
     )
+    parser.add_argument(
+        "--apply-winner",
+        action="store_true",
+        help="Automatically update config.yaml with the winning chunk size and index path.",
+    )
     return parser.parse_args()
 
 
-def _load_phase1_results(results_dir):
-    """Load all Phase 1 retrieval results and return best per chunk_size."""
+def _load_phase1_results(results_dir, ranking_metric="hit_rate"):
+    """Load all Phase 1 retrieval results and return best per chunk_size.
+
+    Args:
+        results_dir: Directory containing Phase 1 result JSON files.
+        ranking_metric: Metric to rank by (hit_rate, mrr, or recall_at_k).
+    """
     pattern = os.path.join(results_dir, "retrieval_*.json")
     files = glob(pattern)
 
@@ -76,8 +86,8 @@ def _load_phase1_results(results_dir):
         if cs not in by_chunk_size or ts > by_chunk_size[cs]["timestamp"]:
             by_chunk_size[cs] = data
 
-    # Sort by hit_rate descending
-    results = sorted(by_chunk_size.values(), key=lambda r: r.get("hit_rate", 0), reverse=True)
+    # Sort by ranking_metric descending
+    results = sorted(by_chunk_size.values(), key=lambda r: r.get(ranking_metric, 0), reverse=True)
     return results
 
 
@@ -144,9 +154,10 @@ def main() -> None:
     cache_dir = eval_cfg.get("cache_dir", "eval/cache")
     cache_enabled = eval_cfg.get("cache_responses", True)
     top_n = args.top_n or eval_cfg.get("top_k_configs_for_generation", 2)
+    ranking_metric = eval_cfg.get("phase1_ranking_metric", "hit_rate")
 
     # Load Phase 1 results
-    phase1_results = _load_phase1_results(results_dir)
+    phase1_results = _load_phase1_results(results_dir, ranking_metric)
     if not phase1_results:
         print("Error: No Phase 1 results found.", file=sys.stderr)
         print("Run Phase 1 first: python -m src.eval_retrieval", file=sys.stderr)
@@ -154,9 +165,9 @@ def main() -> None:
 
     print(f"Found {len(phase1_results)} chunk configs from Phase 1")
     top_configs = phase1_results[:top_n]
-    print(f"Evaluating top {len(top_configs)} configs by hit rate:")
+    print(f"Evaluating top {len(top_configs)} configs from Phase 1 (by {ranking_metric}):")
     for cfg in top_configs:
-        print(f"  chunk_size={cfg['chunk_size']}  hit_rate={cfg['hit_rate']:.4f}  mrr={cfg['mrr']:.4f}")
+        print(f"  chunk_size={cfg['chunk_size']}  hit_rate={cfg['hit_rate']:.4f}  mrr={cfg['mrr']:.4f}  recall_at_k={cfg.get('recall_at_k', 0):.4f}")
     print()
 
     # Load ground truth
@@ -207,22 +218,31 @@ def main() -> None:
         chunk_overlap = cfg_result.get("chunk_overlap", 120)
         chunking_strategy = cfg_result.get("chunking_strategy", "recursive")
         top_k = cfg_result.get("top_k", 4)
+        index_path = cfg_result.get("index_path")
 
         print(f"=== Chunk size: {chunk_size} ===")
 
-        # Re-build index for this config
         from langchain_community.vectorstores import FAISS
-        splitter_cfg = {
-            "chunk_size": chunk_size,
-            "chunk_overlap": chunk_overlap,
-            "chunking_strategy": chunking_strategy,
-        }
-        splitter = make_text_splitter(splitter_cfg)
-        chunks = splitter.split_documents(docs)
-        assign_chunk_ids(chunks)
-        vs = FAISS.from_documents(chunks, embeddings)
 
-        print(f"  Built index: {len(chunks)} chunks")
+        # Load saved index from Phase 1 if available, otherwise rebuild
+        if index_path and os.path.exists(os.path.join(index_path, "index.faiss")):
+            print(f"  Loading saved index from: {index_path}")
+            vs = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+            num_chunks = cfg_result.get("num_chunks", "?")
+            print(f"  Loaded index: {num_chunks} chunks")
+        else:
+            print(f"  No saved index found, rebuilding...")
+            splitter_cfg = {
+                "chunk_size": chunk_size,
+                "chunk_overlap": chunk_overlap,
+                "chunking_strategy": chunking_strategy,
+            }
+            splitter = make_text_splitter(splitter_cfg)
+            chunks = splitter.split_documents(docs)
+            assign_chunk_ids(chunks)
+            vs = FAISS.from_documents(chunks, embeddings)
+            num_chunks = len(chunks)
+            print(f"  Built index: {num_chunks} chunks")
 
         per_question = []
         cache_hits = 0
@@ -235,7 +255,7 @@ def main() -> None:
             # Check cache first (retrieve to get chunk IDs for cache key)
             results_with_scores = vs.similarity_search_with_relevance_scores(question, k=top_k)
             ret_docs = [doc for doc, _ in results_with_scores]
-            scores = [round(score, 4) for _, score in results_with_scores]
+            scores = [round(float(score), 4) for _, score in results_with_scores]
             retrieved_ids = [d.metadata.get("chunk_id", "") for d in ret_docs]
             context_chunks = [d.page_content for d in ret_docs]
             key = _cache_key(question, retrieved_ids)
@@ -298,7 +318,7 @@ Answer:"""
             "chunk_size": chunk_size,
             "chunk_overlap": chunk_overlap,
             "chunking_strategy": chunking_strategy,
-            "num_chunks": len(chunks),
+            "num_chunks": num_chunks,
             "top_k": top_k,
             "timestamp": timestamp,
             "run_name": run_name,
@@ -312,6 +332,7 @@ Answer:"""
             # Carry over Phase 1 metrics
             "phase1_hit_rate": cfg_result.get("hit_rate", 0.0),
             "phase1_mrr": cfg_result.get("mrr", 0.0),
+            "index_path": index_path,
         }
         all_config_results.append(config_result)
 
@@ -345,6 +366,30 @@ Answer:"""
             f"{r['phase1_hit_rate']:<10.4f} {r['phase1_mrr']:<10.4f}"
         )
     print("=" * width)
+    print()
+
+    # Show winner and how to use it
+    winner = all_config_results[0]
+    print(f"Winner: chunk_size={winner['chunk_size']} (Correctness: {winner['avg_correctness']:.4f})")
+    if winner.get("index_path"):
+        print(f"Index saved at: {winner['index_path']}")
+        print()
+
+        if args.apply_winner:
+            # Update config.yaml with winner
+            config["chunk_size"] = winner["chunk_size"]
+            config["index_path"] = f"./{winner['index_path']}"
+            with open(args.config, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+            print(f"Updated {args.config} with winning config:")
+            print(f"  chunk_size: {winner['chunk_size']}")
+            print(f"  index_path: ./{winner['index_path']}")
+        else:
+            print("To use this config in production, update config.yaml:")
+            print(f"  chunk_size: {winner['chunk_size']}")
+            print(f"  index_path: ./{winner['index_path']}")
+            print()
+            print("Or re-run with --apply-winner to auto-update config.yaml")
     print()
     print(f"Results saved to {results_dir}/")
 
