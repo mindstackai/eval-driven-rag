@@ -11,7 +11,10 @@ class Config:
         emb_cfg = cfg.get("embedding", {})
         mode = emb_cfg.get("mode", "auto")
         if mode == "auto":
-            mode = "openai" if os.getenv("OPENAI_API_KEY") else "local"
+            if os.getenv("OPENAI_API_KEY"):
+                mode = "openai"
+            else:
+                mode = "local"
         self.embedding_mode = mode
         self._chunking = resolve_chunking_config(cfg)
 
@@ -29,6 +32,12 @@ class Config:
             "tracker_path", "./vectorstore/document_tracker.json"
         )
 
+    def get_lancedb_path(self) -> str:
+        return self._config.get("lancedb", {}).get("db_path", "./vectorstore/lancedb")
+
+    def get_lancedb_table(self) -> str:
+        return self._config.get("lancedb", {}).get("table_name", "chunks")
+
     def get_embeddings(self):
         if self.embedding_mode == "openai":
             from langchain_openai import OpenAIEmbeddings
@@ -43,6 +52,7 @@ class Config:
     def print_config_summary(self):
         print("=== Configuration ===")
         print(f"  Embedding mode : {self.embedding_mode}")
+
         print(f"  Index path     : {self.get_index_path()}")
         profile = self._config.get("profile")
         if profile:

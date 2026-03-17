@@ -4,16 +4,13 @@ Phase 1: Retrieval Evaluation — no LLM calls, local only.
 Tests multiple chunk sizes, re-ingests docs for each, runs retrieval,
 and calculates Hit Rate and MRR per chunk size.
 
-Since chunk IDs change with different chunk sizes, this module uses
-content-based matching: a retrieved chunk is considered a "hit" if it
-shares significant text overlap with any expected chunk.
-
 Usage:
     python -m src.eval_retrieval
     python -m src.eval_retrieval --ground_truth eval/ground_truth.json
 """
 import argparse
 import json
+import lancedb
 import os
 import sys
 from datetime import datetime
@@ -24,40 +21,26 @@ from metrics.overlap import text_overlap_ratio, is_content_match, content_recipr
 
 from src.ingest import load_docs, assign_chunk_ids
 from src.splitters import make_text_splitter
+from src.vectorstore.lancedb_store import LanceDBStore
+from src.retriever import LanceDBRetriever
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Phase 1: Retrieval eval across multiple chunk sizes."
     )
-    parser.add_argument(
-        "--ground_truth",
-        type=str,
-        default="eval/ground_truth.json",
-        help="Path to the ground truth JSON file.",
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="config.yaml",
-        help="Path to the config.yaml file.",
-    )
-    parser.add_argument(
-        "--name",
-        type=str,
-        default=None,
-        help="Short description/goal for this eval run (e.g. 'baseline recursive strategy').",
-    )
+    parser.add_argument("--ground_truth", type=str, default="eval/ground_truth.json")
+    parser.add_argument("--config", type=str, default="config.yaml")
+    parser.add_argument("--name", type=str, default=None)
     parser.add_argument(
         "--apply-winner",
         action="store_true",
-        help="Automatically update config.yaml with the winning chunk size and index path.",
+        help="Automatically update config.yaml with the winning chunk size.",
     )
     return parser.parse_args()
 
 
 def _build_reference_content_map(docs, config):
-    """Build chunks at reference config and return {chunk_id: page_content}."""
     splitter = make_text_splitter(config)
     chunks = splitter.split_documents(docs)
     assign_chunk_ids(chunks)
@@ -65,12 +48,7 @@ def _build_reference_content_map(docs, config):
 
 
 def _build_and_save_index(docs, chunk_size, chunk_overlap, chunking_strategy, embeddings, base_dir="vectorstore"):
-    """Build a FAISS index and save it to disk for later production use.
-
-    Indexes are saved to: {base_dir}/faiss_index_{chunk_size}/
-    """
-    from langchain_community.vectorstores import FAISS
-
+    """Build a LanceDB index for one chunk-size config and save it to disk."""
     cfg = {
         "chunk_size": chunk_size,
         "chunk_overlap": chunk_overlap,
@@ -80,47 +58,48 @@ def _build_and_save_index(docs, chunk_size, chunk_overlap, chunking_strategy, em
     chunks = splitter.split_documents(docs)
     assign_chunk_ids(chunks)
 
-    vs = FAISS.from_documents(chunks, embeddings)
+    for chunk in chunks:
+        chunk.metadata.setdefault("allowed_roles", "public")
 
-    # Save index to disk
-    index_path = os.path.join(base_dir, f"faiss_index_{chunk_size}")
-    os.makedirs(index_path, exist_ok=True)
-    vs.save_local(index_path)
+    texts = [c.page_content for c in chunks]
+    vectors = embeddings.embed_documents(texts)
+    metadatas = [c.metadata for c in chunks]
 
-    return vs, chunks, index_path
+    db_path = os.path.join(base_dir, f"lancedb_eval_{chunk_size}")
+    table_name = "eval_chunks"
+
+    # Drop and recreate for a clean eval run
+    db = lancedb.connect(db_path)
+    if table_name in db.table_names():
+        db.drop_table(table_name)
+
+    store = LanceDBStore(db_path=db_path, table_name=table_name)
+    store.add_documents(texts, vectors, metadatas)
+
+    return store, chunks, db_path, table_name
 
 
-def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
-    """Run retrieval eval using content-based matching."""
+def _run_retrieval_for_config(retriever, ground_truth, k, ref_content_map):
     per_question = []
-    hit_rates = []
-    mrr_scores = []
-    recall_scores = []
+    hit_rates, mrr_scores, recall_scores = [], [], []
 
     for item in ground_truth:
         question = item["question"]
         expected_ids = item.get("expected_chunk_ids", [])
 
-        # Look up expected chunk content from reference map
         expected_texts = [
             ref_content_map[cid] for cid in expected_ids if cid in ref_content_map
         ]
 
-        results_with_scores = vs.similarity_search_with_relevance_scores(question, k=k)
+        results_with_scores = retriever.similarity_search_with_relevance_scores(question, k=k)
         docs = [doc for doc, _ in results_with_scores]
         scores = [round(float(score), 4) for _, score in results_with_scores]
         retrieved_ids = [d.metadata.get("chunk_id", "") for d in docs]
-
         retrieved_texts = [d.page_content for d in docs]
 
-        # Content-based hit: any retrieved chunk overlaps with any expected chunk
-        hit = 1.0 if any(
-            is_content_match(d.page_content, expected_texts) for d in docs
-        ) else 0.0
-
+        hit = 1.0 if any(is_content_match(d.page_content, expected_texts) for d in docs) else 0.0
         mrr = content_reciprocal_rank(retrieved_texts, expected_texts)
 
-        # Content-based recall: fraction of expected chunks "covered" by retrieved
         if expected_texts:
             covered = sum(
                 1 for exp_text in expected_texts
@@ -158,7 +137,6 @@ def _run_retrieval_for_config(vs, ground_truth, k, ref_content_map):
 def main() -> None:
     args = parse_args()
 
-    # Load ground truth
     try:
         with open(args.ground_truth, "r") as f:
             ground_truth = json.load(f)
@@ -168,7 +146,6 @@ def main() -> None:
 
     print(f"Loaded {len(ground_truth)} questions from {args.ground_truth}")
 
-    # Load config
     with open(args.config, "r") as f:
         config = yaml.safe_load(f)
 
@@ -181,14 +158,12 @@ def main() -> None:
 
     os.makedirs(results_dir, exist_ok=True)
 
-    # Load embeddings once
     from dotenv import load_dotenv
     load_dotenv()
     from src.config_manager import get_config
     cfg_obj = get_config(args.config)
     embeddings = cfg_obj.get_embeddings()
 
-    # Load raw docs once
     print("Loading documents from data/raw/ ...")
     docs = load_docs()
     if not docs:
@@ -196,23 +171,19 @@ def main() -> None:
         sys.exit(1)
     print(f"Loaded {len(docs)} document pages")
 
-    # Build reference content map from default config (to resolve expected_chunk_ids)
     print("Building reference chunks for content matching ...")
     ref_content_map = _build_reference_content_map(docs, config)
     print(f"Reference index: {len(ref_content_map)} chunks at chunk_size={config.get('chunk_size', 800)}")
     print()
 
-    # Run retrieval eval for each chunk size
     all_results = []
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Determine run name
     run_name = args.name
     if not run_name:
         sizes_str = "_".join(str(s) for s in chunk_sizes)
         run_name = f"{chunking_strategy}_{sizes_str}_overlap{chunk_overlap}"
 
-    # Build display name with formatted timestamp
     display_ts = datetime.strptime(timestamp, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M")
     display_name = f"{run_name} ({display_ts})"
     print(f"Run: {display_name}")
@@ -222,26 +193,30 @@ def main() -> None:
         print(f"--- Chunk size: {chunk_size} ---")
         print(f"  Building index (strategy={chunking_strategy}, overlap={chunk_overlap}) ...")
 
-        vs, chunks, index_path = _build_and_save_index(
+        store, chunks, lancedb_path, table_name = _build_and_save_index(
             docs, chunk_size, chunk_overlap, chunking_strategy, embeddings
         )
-        print(f"  {len(chunks)} chunks indexed")
-        print(f"  Index saved to: {index_path}")
+        retriever = LanceDBRetriever(store, embeddings, top_k)
 
-        metrics = _run_retrieval_for_config(vs, ground_truth, top_k, ref_content_map)
-        metrics["chunk_size"] = chunk_size
-        metrics["chunk_overlap"] = chunk_overlap
-        metrics["chunking_strategy"] = chunking_strategy
-        metrics["num_chunks"] = len(chunks)
-        metrics["top_k"] = top_k
-        metrics["timestamp"] = timestamp
-        metrics["run_name"] = run_name
-        metrics["display_name"] = display_name
-        metrics["index_path"] = index_path
+        print(f"  {len(chunks)} chunks indexed")
+        print(f"  Index saved to: {lancedb_path}")
+
+        metrics = _run_retrieval_for_config(retriever, ground_truth, top_k, ref_content_map)
+        metrics.update({
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "chunking_strategy": chunking_strategy,
+            "num_chunks": len(chunks),
+            "top_k": top_k,
+            "timestamp": timestamp,
+            "run_name": run_name,
+            "display_name": display_name,
+            "lancedb_path": lancedb_path,
+            "table_name": table_name,
+        })
 
         all_results.append(metrics)
 
-        # Save per-config results
         result_path = os.path.join(results_dir, f"retrieval_{chunk_size}_{timestamp}.json")
         with open(result_path, "w") as f:
             json.dump(metrics, f, indent=2)
@@ -250,7 +225,6 @@ def main() -> None:
         print(f"  Saved: {result_path}")
         print()
 
-    # Print summary table ranked by hit rate
     all_results.sort(key=lambda r: r["hit_rate"], reverse=True)
 
     width = 72
@@ -267,27 +241,20 @@ def main() -> None:
     print("=" * width)
     print()
 
-    # Show winner and how to use it
     winner = all_results[0]
     print(f"Winner: chunk_size={winner['chunk_size']} (Hit Rate: {winner['hit_rate']:.4f})")
-    print(f"Index saved at: {winner['index_path']}")
+    print(f"Index saved at: {winner['lancedb_path']}")
     print()
 
     if args.apply_winner:
-        # Update config.yaml with winner
         config["chunk_size"] = winner["chunk_size"]
-        config["index_path"] = f"./{winner['index_path']}"
         with open(args.config, "w") as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
-        print(f"Updated {args.config} with winning config:")
-        print(f"  chunk_size: {winner['chunk_size']}")
-        print(f"  index_path: ./{winner['index_path']}")
+        print(f"Updated {args.config}: chunk_size → {winner['chunk_size']}")
     else:
-        print("To use this config in production, update config.yaml:")
+        print("To use this config, update config.yaml:")
         print(f"  chunk_size: {winner['chunk_size']}")
-        print(f"  index_path: ./{winner['index_path']}")
-        print()
-        print("Or re-run with --apply-winner to auto-update config.yaml")
+        print("Or re-run with --apply-winner")
     print()
     print(f"Results saved to {results_dir}/")
     print("Run Phase 2 with: python -m src.eval_generation")

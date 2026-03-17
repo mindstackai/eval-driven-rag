@@ -2,7 +2,6 @@ chunk_size: 512
 chunk_overlap: 120
 chunking_strategy: recursive
 top_k: 3
-index_path: ./vectorstore/faiss_index_512
 profiles:
   general:
     chunk_size: 800
@@ -23,9 +22,6 @@ profiles:
 embedding:
   mode: auto
   batch_size: 100
-incremental:
-  enabled: true
-  tracker_path: ./vectorstore/document_tracker.json
 slo:
   e2e_p95_ms: 5000
   retriever_p95_ms: 500

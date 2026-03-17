@@ -76,8 +76,13 @@ class LanceDBStore:
         if len(chunks) != len(embeddings) or len(chunks) != len(metadatas):
             raise ValueError("chunks, embeddings, and metadatas must have the same length.")
 
+        def _sanitize(meta: dict) -> dict:
+            # LanceDB forbids dots in top-level column names (e.g. ptex.fullbanner
+            # injected by PyPDF).  Replace every dot with an underscore.
+            return {k.replace(".", "_"): v for k, v in meta.items()}
+
         rows = [
-            {"text": text, "vector": emb, **meta}
+            {"text": text, "vector": emb, **_sanitize(meta)}
             for text, emb, meta in zip(chunks, embeddings, metadatas)
         ]
 
@@ -93,6 +98,7 @@ class LanceDBStore:
         query_embedding: list[float],
         k: int,
         filters: dict = None,
+        prefilter: bool = False,
     ) -> list[dict]:
         """
         Return the top-k most similar chunks for *query_embedding*.
@@ -100,10 +106,13 @@ class LanceDBStore:
         Args:
             query_embedding: Embedding vector of the query.
             k: Number of results to return.
-            filters: Optional metadata filters applied before ranking.
-                     Example: ``{"allowed_roles": "analyst"}`` restricts
-                     results to chunks whose ``allowed_roles`` field matches.
-                     Supports equality checks on scalar metadata fields.
+            filters: Optional metadata filters.
+                     Scalar value  → equality check:  ``{"allowed_roles": "analyst"}``
+                     List value    → IN check:         ``{"allowed_roles": ["analyst", "public"]}``
+            prefilter: When True, the WHERE clause is applied *before* ANN search
+                       (better for high-selectivity roles like admin/exec that match
+                       very few chunks).  When False (default), filtering happens
+                       after ANN candidate retrieval.
 
         Returns:
             List of dicts, each containing at least ``text``, ``score``,
@@ -116,11 +125,19 @@ class LanceDBStore:
         query = table.search(query_embedding).limit(k)
 
         if filters:
-            filter_clauses = " AND ".join(
-                f"{key} = '{value}'" if isinstance(value, str) else f"{key} = {value}"
-                for key, value in filters.items()
-            )
-            query = query.where(filter_clauses)
+            clauses = []
+            for key, value in filters.items():
+                if isinstance(value, list):
+                    quoted = ", ".join(
+                        f"'{v}'" if isinstance(v, str) else str(v) for v in value
+                    )
+                    clauses.append(f"{key} IN ({quoted})")
+                elif isinstance(value, str):
+                    clauses.append(f"{key} = '{value}'")
+                else:
+                    clauses.append(f"{key} = {value}")
+            filter_str = " AND ".join(clauses)
+            query = query.where(filter_str, prefilter=prefilter)
 
         results = query.to_list()
 
