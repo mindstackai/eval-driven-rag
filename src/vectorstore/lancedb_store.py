@@ -111,8 +111,28 @@ class LanceDBStore:
 
         db = self._open_db()
         if self.table_name in db.table_names():
-            self._table = db.open_table(self.table_name)
-            self._table.add(rows)
+            tbl = db.open_table(self.table_name)
+            existing_cols = set(tbl.schema.names)
+            # Only guard for extra_metadata — it is always written by _normalize()
+            # and its absence means the table was created with an old schema.
+            # Core columns (source, page, etc.) are optional and may be absent
+            # in test fixtures or minimal ingests.
+            missing = {"extra_metadata"} - existing_cols
+            if missing:
+                # Schema is stale (e.g. created before extra_metadata was added).
+                # Drop and recreate so the new schema takes effect.
+                import warnings
+                warnings.warn(
+                    f"Table '{self.table_name}' is missing columns {missing}. "
+                    "Dropping and recreating with the current schema. "
+                    "Re-run ingest to repopulate.",
+                    stacklevel=2,
+                )
+                db.drop_table(self.table_name)
+                self._table = db.create_table(self.table_name, data=rows)
+            else:
+                self._table = tbl
+                self._table.add(rows)
         else:
             self._table = db.create_table(self.table_name, data=rows)
 
