@@ -208,6 +208,6 @@ __marimo__/
 
 # Project-specific
 data/raw/*.pdf
-vectorstore/
+/vectorstore/        # top-level data dir only; does NOT affect src/vectorstore/
 eval/cache/
 eval/results/*.json

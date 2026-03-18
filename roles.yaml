@@ -1,0 +1,12 @@
+# Role hierarchy — each role inherits access to all roles listed beneath it.
+# admin sees everything; public sees only public-tagged chunks.
+hierarchy:
+  admin:   [admin, analyst, public]
+  analyst: [analyst, public]
+  public:  [public]
+
+# User-to-role mapping.  Add users here or manage them through the admin UI.
+users:
+  alice: admin
+  bob:   analyst
+  carol: public
