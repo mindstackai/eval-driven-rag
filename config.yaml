@@ -39,4 +39,4 @@ eval:
   results_dir: eval/results/
 lancedb:
   db_path: ./vectorstore/lancedb
-  table_name: fleet_chunks
+  table_name: documents
