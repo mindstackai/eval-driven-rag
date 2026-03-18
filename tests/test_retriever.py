@@ -176,7 +176,9 @@ class TestAuthIntegration:
         roles = get_user_roles("bob")                           # ["analyst", "public"]
         retriever = _make_retriever(populated_store, embeddings, roles)
         docs = retriever.invoke("document information")
-        assert "admin" not in _roles_seen(docs)
+        seen = _roles_seen(docs)
+        assert "admin" not in seen                              # admin chunk is invisible
+        assert {"analyst", "public"}.issubset(seen)            # analyst + public chunks returned
 
     def test_public_user_sees_only_public(self, populated_store, embeddings):
         set_user_role("carol", "public")
