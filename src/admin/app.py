@@ -69,7 +69,7 @@ with upload_tab:
 
             try:
                 with st.spinner(f"Chunking and embedding {uploaded.name}..."):
-                    n = ingest_file_to_lancedb(tmp_path, role, config)
+                    n = ingest_file_to_lancedb(tmp_path, role, config, display_name=uploaded.name)
                 st.success(f"Ingested **{n} chunks** from `{uploaded.name}` with role `{role}`.")
             except Exception as e:
                 st.error(f"Ingest failed: {e}")

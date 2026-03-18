@@ -49,6 +49,7 @@ def ingest_file_to_lancedb(
     allowed_role: str,
     config,
     ingest_source: IngestSource = "admin",
+    display_name: str | None = None,
 ) -> int:
     """
     Ingest a single file into LanceDB with the given access role.
@@ -69,6 +70,9 @@ def ingest_file_to_lancedb(
         allowed_role:   Role string tagged on every chunk (e.g. "analyst").
         config:         Config instance from get_config().
         ingest_source:  "bulk" (CLI rebuild) or "admin" (UI upload).
+        display_name:   Original filename to store as `source`. Useful when
+                        file_path is a temp file (e.g. from a browser upload)
+                        and the real name would otherwise be lost.
 
     Returns:
         Number of new chunks stored (0 if all already existed).
@@ -86,6 +90,12 @@ def ingest_file_to_lancedb(
     splitter = make_text_splitter(config._config)
     chunks = splitter.split_documents(docs)
     assign_chunk_ids(chunks)
+
+    # Override source with the original display name if provided
+    # (temp files from browser uploads have random names like tmpmj7uart6.pdf)
+    if display_name:
+        for chunk in chunks:
+            chunk.metadata["source"] = display_name
 
     ingested_at = datetime.now(timezone.utc).isoformat()
     for chunk in chunks:
