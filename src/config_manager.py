@@ -52,8 +52,8 @@ class Config:
     def print_config_summary(self):
         print("=== Configuration ===")
         print(f"  Embedding mode : {self.embedding_mode}")
-
-        print(f"  Index path     : {self.get_index_path()}")
+        print(f"  LanceDB path   : {self.get_lancedb_path()}")
+        print(f"  LanceDB table  : {self.get_lancedb_table()}")
         profile = self._config.get("profile")
         if profile:
             print(f"  Profile        : {profile}")
@@ -61,7 +61,6 @@ class Config:
         print(f"  Chunk size     : {self._chunking['chunk_size']}")
         print(f"  Chunk overlap  : {self._chunking['chunk_overlap']}")
         print(f"  Top-k          : {self._config.get('top_k', 4)}")
-        print(f"  Incremental    : {self.is_incremental_enabled()}")
         print()
 
 

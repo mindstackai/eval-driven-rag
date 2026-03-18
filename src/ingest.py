@@ -125,7 +125,11 @@ def ingest_file_to_lancedb(
 
 
 def main():
-    """Bulk rebuild: drop existing table and re-ingest everything from data/raw/ as public."""
+    """Bulk rebuild from data/raw/ — only touches bulk-ingested chunks.
+
+    Admin-uploaded chunks (ingest_source='admin') are preserved so that
+    role assignments made via the UI are never wiped by a CLI rebuild.
+    """
     config = get_config()
     config.print_config_summary()
 
@@ -137,11 +141,12 @@ def main():
         print("No documents found in data/raw/. Add PDFs or .txt files and re-run.")
         return
 
-    # Drop existing table for a clean rebuild
+    # Remove only bulk-sourced chunks so admin uploads are preserved.
     db = lancedb.connect(config.get_lancedb_path())
     if config.get_lancedb_table() in db.table_names():
-        db.drop_table(config.get_lancedb_table())
-        print(f"Dropped existing table '{config.get_lancedb_table()}'")
+        tbl = db.open_table(config.get_lancedb_table())
+        tbl.delete("ingest_source = 'bulk'")
+        print(f"Removed existing bulk chunks from '{config.get_lancedb_table()}' (admin chunks preserved)")
 
     total = 0
     for file_path in raw_files:
@@ -150,7 +155,7 @@ def main():
         print(f"    → {n} chunks")
         total += n
 
-    print(f"\nStored {total} chunks in LanceDB → {config.get_lancedb_path()}")
+    print(f"\nStored {total} bulk chunks in LanceDB → {config.get_lancedb_path()}")
 
 
 if __name__ == "__main__":
