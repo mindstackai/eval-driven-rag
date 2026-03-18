@@ -210,8 +210,9 @@ class TestPrefilter:
 # ──────────────────────────────────────────────
 
 class TestMetadataSanitization:
-    def test_dot_in_metadata_key_is_stored(self, tmp_path):
-        """PyPDF injects keys like 'ptex.fullbanner' — dots must be sanitized."""
+    def test_dot_in_metadata_key_stored_in_extra(self, tmp_path):
+        """PyPDF keys like 'ptex.fullbanner' must not break the schema.
+        They are packed into extra_metadata JSON, not top-level columns."""
         s = LanceDBStore(str(tmp_path / "db"), "tbl")
         s.add_documents(
             ["pdf chunk"],
@@ -219,9 +220,11 @@ class TestMetadataSanitization:
             [{"ptex.fullbanner": "TeX", "allowed_roles": "public"}],
         )
         results = s.similarity_search([1.0, 0.0, 0.0, 0.0], k=1)
-        assert results[0]["ptex_fullbanner"] == "TeX"
+        import json
+        extra = json.loads(results[0]["extra_metadata"])
+        assert extra["ptex_fullbanner"] == "TeX"
 
-    def test_multiple_dots_sanitized(self, tmp_path):
+    def test_multiple_dots_sanitized_in_extra(self, tmp_path):
         s = LanceDBStore(str(tmp_path / "db"), "tbl")
         s.add_documents(
             ["chunk"],
@@ -229,7 +232,28 @@ class TestMetadataSanitization:
             [{"a.b.c": "val", "allowed_roles": "public"}],
         )
         results = s.similarity_search([1.0, 0.0, 0.0, 0.0], k=1)
-        assert "a_b_c" in results[0]
+        import json
+        extra = json.loads(results[0]["extra_metadata"])
+        assert "a_b_c" in extra
+
+    def test_second_file_different_metadata_does_not_raise(self, tmp_path):
+        """Core schema must be stable across files with different PDF metadata."""
+        s = LanceDBStore(str(tmp_path / "db"), "tbl")
+        s.add_documents(
+            ["first chunk"],
+            [[1.0, 0.0, 0.0, 0.0]],
+            [{"source": "a.pdf", "allowed_roles": "public"}],
+        )
+        # Second file has 'moddate' that first file didn't — must not raise
+        s.add_documents(
+            ["second chunk"],
+            [[0.0, 1.0, 0.0, 0.0]],
+            [{"source": "b.pdf", "allowed_roles": "public", "moddate": "2024-01-01"}],
+        )
+        results = s.similarity_search([0.0, 1.0, 0.0, 0.0], k=1)
+        import json
+        extra = json.loads(results[0]["extra_metadata"])
+        assert extra["moddate"] == "2024-01-01"
 
 
 class TestEdgeCases:

@@ -6,9 +6,15 @@ file-level access control: store ``allowed_roles`` in each chunk's metadata
 and pass ``{"allowed_roles": "admin"}`` (or similar) at query time to restrict
 results to chunks the requesting user is permitted to see.
 """
+import json
 from typing import Any
 
 import numpy as np
+
+# Fixed schema columns written as top-level LanceDB fields.
+# Any metadata key NOT in this set is serialised into `extra_metadata` (JSON
+# string) so that varying PDF metadata never breaks the schema on append.
+_CORE_COLUMNS = {"source", "page", "allowed_roles", "chunk_id", "ingest_source", "ingest_date"}
 
 
 class LanceDBStore:
@@ -76,13 +82,30 @@ class LanceDBStore:
         if len(chunks) != len(embeddings) or len(chunks) != len(metadatas):
             raise ValueError("chunks, embeddings, and metadatas must have the same length.")
 
-        def _sanitize(meta: dict) -> dict:
-            # LanceDB forbids dots in top-level column names (e.g. ptex.fullbanner
-            # injected by PyPDF).  Replace every dot with an underscore.
-            return {k.replace(".", "_"): v for k, v in meta.items()}
+        def _normalize(meta: dict) -> dict:
+            """Return a row dict with a fixed schema.
+
+            Core columns (source, page, allowed_roles, chunk_id,
+            ingest_source, ingest_date) are promoted to top-level fields.
+            Everything else — including arbitrary PDF metadata like
+            'moddate', 'ptex.fullbanner', etc. — is packed into
+            ``extra_metadata`` as a JSON string so the schema never varies
+            between files.
+            """
+            core = {}
+            extra = {}
+            for k, v in meta.items():
+                # Normalise key: replace dots (LanceDB forbids them in column names)
+                norm_key = k.replace(".", "_")
+                if norm_key in _CORE_COLUMNS:
+                    core[norm_key] = v
+                else:
+                    extra[norm_key] = v
+            core["extra_metadata"] = json.dumps(extra) if extra else "{}"
+            return core
 
         rows = [
-            {"text": text, "vector": emb, **_sanitize(meta)}
+            {"text": text, "vector": emb, **_normalize(meta)}
             for text, emb, meta in zip(chunks, embeddings, metadatas)
         ]
 
