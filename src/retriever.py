@@ -5,6 +5,9 @@ LanceDBRetriever wraps LanceDBStore in a LangChain-compatible interface
 so the rest of the codebase (app, eval) can call .invoke() or
 .similarity_search_with_relevance_scores() without knowing the store type.
 """
+from dotenv import load_dotenv
+load_dotenv()
+
 from langchain_core.documents import Document
 
 from src.config_manager import get_config
