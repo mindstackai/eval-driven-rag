@@ -12,22 +12,36 @@ st.title("RAG Research Assistant")
 
 config = get_config()
 
-st.sidebar.markdown("### Configuration")
-st.sidebar.info(f"**Embedding Mode:** {config.embedding_mode}")
-
+# ── Sidebar: identity & access ─────────────────────────────────────────────
+st.sidebar.markdown("### Identity")
 user_id = st.sidebar.text_input(
     "User ID",
     value="",
-    placeholder="e.g. alice",
+    placeholder="e.g. alice, bob, carol",
     help="Leave blank for unrestricted access. Roles are configured in roles.yaml.",
 )
 
+from src.auth import get_user_role, get_user_roles, list_users
+
+if user_id:
+    assigned_role = get_user_role(user_id)
+    expanded_roles = get_user_roles(user_id)
+
+    role_colour = {"admin": "🔴", "analyst": "🟡", "public": "🟢"}.get(assigned_role, "⚪")
+    st.sidebar.markdown(
+        f"**{role_colour} {user_id}** — `{assigned_role}`\n\n"
+        f"Can read: {' · '.join(f'`{r}`' for r in expanded_roles)}"
+    )
+else:
+    st.sidebar.info("No user — unrestricted access (all chunks visible).")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Configuration")
+st.sidebar.info(f"**Embedding:** {config.embedding_mode}")
+
+# ── Load retriever ─────────────────────────────────────────────────────────
 try:
     retriever = get_retriever(user_id=user_id or None)
-    if user_id:
-        from src.auth import get_user_roles
-        roles = get_user_roles(user_id)
-        st.sidebar.success(f"**Roles:** {', '.join(roles)}")
 except RuntimeError:
     st.error(
         "No LanceDB index found. Ingest documents first:\n\n"
@@ -65,5 +79,9 @@ if query:
     if result["sources"]:
         st.subheader("Sources")
         for i, doc in enumerate(result["sources"], 1):
-            st.markdown(f"**{i}.** `{doc.metadata.get('source')}` | Page {doc.metadata.get('page')}")
+            role = doc.metadata.get("allowed_roles", "?")
+            role_badge = {"admin": "🔴 admin", "analyst": "🟡 analyst", "public": "🟢 public"}.get(role, f"⚪ {role}")
+            source = doc.metadata.get("source", "unknown")
+            page = doc.metadata.get("page", "?")
+            st.markdown(f"**{i}.** `{source}` | Page {page} | {role_badge}")
             st.caption(doc.page_content[:300] + "...")
