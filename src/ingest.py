@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import argparse
 import hashlib
 import lancedb
 from datetime import datetime, timezone
@@ -125,11 +126,24 @@ def ingest_file_to_lancedb(
 
 
 def main():
-    """Bulk rebuild from data/raw/ — only touches bulk-ingested chunks.
+    """Ingest files from data/raw/ into LanceDB.
 
-    Admin-uploaded chunks (ingest_source='admin') are preserved so that
-    role assignments made via the UI are never wiped by a CLI rebuild.
+    Idempotent by default: chunks are skipped if their chunk_id (content hash)
+    already exists. Re-running with unchanged files does nothing.
+
+    Use --force to wipe all bulk-ingested chunks first (e.g. after removing
+    files from data/raw/). Admin-uploaded chunks are never affected.
     """
+    parser = argparse.ArgumentParser(description="Ingest documents from data/raw/ into LanceDB.")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Delete all existing bulk-ingested chunks before re-ingesting. "
+             "Use when files have been removed from data/raw/. "
+             "Admin-uploaded chunks are preserved.",
+    )
+    args = parser.parse_args()
+
     config = get_config()
     config.print_config_summary()
 
@@ -141,12 +155,12 @@ def main():
         print("No documents found in data/raw/. Add PDFs or .txt files and re-run.")
         return
 
-    # Remove only bulk-sourced chunks so admin uploads are preserved.
-    db = lancedb.connect(config.get_lancedb_path())
-    if config.get_lancedb_table() in db.table_names():
-        tbl = db.open_table(config.get_lancedb_table())
-        tbl.delete("ingest_source = 'bulk'")
-        print(f"Removed existing bulk chunks from '{config.get_lancedb_table()}' (admin chunks preserved)")
+    if args.force:
+        db = lancedb.connect(config.get_lancedb_path())
+        if config.get_lancedb_table() in db.table_names():
+            tbl = db.open_table(config.get_lancedb_table())
+            tbl.delete("ingest_source = 'bulk'")
+            print(f"--force: removed existing bulk chunks (admin chunks preserved)")
 
     total = 0
     for file_path in raw_files:
@@ -155,7 +169,10 @@ def main():
         print(f"    → {n} chunks")
         total += n
 
-    print(f"\nStored {total} bulk chunks in LanceDB → {config.get_lancedb_path()}")
+    if total == 0:
+        print("Nothing new to ingest — all chunks already in the index.")
+    else:
+        print(f"\nStored {total} new bulk chunks in LanceDB → {config.get_lancedb_path()}")
 
 
 if __name__ == "__main__":
