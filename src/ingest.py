@@ -43,7 +43,9 @@ def ingest_file_to_lancedb(file_path: Path, allowed_role: str, config) -> int:
     Ingest a single file into LanceDB with the given access role.
 
     Used by the admin UI for per-file role assignment.
-    Appends to the existing table — does not rebuild.
+    Appends new chunks to the existing table — skips chunks whose chunk_id
+    (content hash) already exists.  Never deletes existing data, so re-uploading
+    the same file is idempotent and safe against name-collision attacks.
 
     Args:
         file_path: Path to a PDF, .txt, or .md file.
@@ -51,7 +53,7 @@ def ingest_file_to_lancedb(file_path: Path, allowed_role: str, config) -> int:
         config: Config instance from get_config().
 
     Returns:
-        Number of chunks stored.
+        Number of new chunks stored (0 if all already existed).
     """
     suffix = file_path.suffix.lower()
     if suffix == ".pdf":
@@ -70,18 +72,37 @@ def ingest_file_to_lancedb(file_path: Path, allowed_role: str, config) -> int:
     for chunk in chunks:
         chunk.metadata["allowed_roles"] = allowed_role
 
-    embeddings_model = config.get_embeddings()
-    texts = [c.page_content for c in chunks]
-    vectors = embeddings_model.embed_documents(texts)
-    metadatas = [c.metadata for c in chunks]
-
     store = LanceDBStore(
         db_path=config.get_lancedb_path(),
         table_name=config.get_lancedb_table(),
     )
+
+    # Deduplicate by chunk_id (content hash) — safe against re-upload attacks.
+    # We never delete existing data; we only skip chunks already present.
+    table = store._open_table()
+    if table is not None:
+        existing_ids = set(
+            table.search().select(["chunk_id"]).limit(None).to_pandas()["chunk_id"].tolist()
+        )
+        new_chunks = [c for c in chunks if c.metadata["chunk_id"] not in existing_ids]
+    else:
+        new_chunks = chunks
+
+    if not new_chunks:
+        return 0  # all chunks already exist, nothing to do
+
+    embeddings_model = config.get_embeddings()
+    texts = [c.page_content for c in new_chunks]
+    vectors = embeddings_model.embed_documents(texts)
+    metadatas = [c.metadata for c in new_chunks]
+
     store.add_documents(texts, vectors, metadatas)
 
-    return len(chunks)
+    skipped = len(chunks) - len(new_chunks)
+    if skipped:
+        print(f"  Skipped {skipped} duplicate chunk(s) already in the index.")
+
+    return len(new_chunks)
 
 
 def main():
