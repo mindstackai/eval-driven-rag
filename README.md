@@ -78,17 +78,27 @@ eval-driven-rag/
 │   ├── raw/                        # source documents (PDF, txt)
 │   ├── processed/                  # preprocessed text
 │   └── eval/
-│       └── qa_pairs.json           # labeled Q&A pairs for eval runs
+│       ├── qa_pairs.json           # labeled Q&A pairs for eval runs
+│       └── eval_queries.jsonl      # benchmark eval queries (0-based corpus positions)
 │
 ├── notebooks/
 │   ├── 01_chunk_token_vector.ipynb # chunking strategy exploration
 │   ├── 02_retrieval_eval.ipynb     # eval framework walkthrough
-│   └── 03_lancedb_vs_faiss.ipynb   # vector store comparison
+│   ├── 03_lancedb_vs_faiss.ipynb   # vector store comparison
+│   └── finetune_colab.ipynb        # fine-tuning notebook (Colab / GPU)
 │
 ├── eval/
 │   ├── ground_truth.json           # labeled Q&A pairs for two-phase eval
 │   ├── cache/                      # cached LLM responses (Phase 2)
 │   └── results/                    # eval results (JSON per run)
+│
+├── scripts/
+│   ├── run_benchmark.py            # 8-model embedding benchmark (Hit@5, MRR, Recall@5)
+│   ├── smoke_test_embedders.py     # verify all embedders load and produce correct dims
+│   └── update_training_data.py     # one-command Phase 2 data refresh (Steps 1-3)
+│
+├── traces/
+│   └── experiment_log.jsonl        # benchmark run history (all models, all runs)
 │
 ├── src/
 │   ├── ingest.py                   # load → split → embed → store
@@ -101,6 +111,18 @@ eval-driven-rag/
 │   ├── eval_generation.py          # Phase 2: generation eval (LLM)
 │   ├── eval_dashboard.py           # legacy entry point (redirects to dashboard module)
 │   │
+│   ├── embedders/                  # embedding model abstraction
+│   │   ├── __init__.py             # load_embedder() factory
+│   │   ├── base.py                 # BaseEmbedder ABC
+│   │   ├── huggingface.py          # HuggingFaceEmbedder (local, MPS/CUDA/CPU)
+│   │   └── openai.py               # OpenAIEmbedder (API)
+│   │
+│   ├── training/                   # fine-tuning pipeline
+│   │   ├── generate_pairs.py       # synthetic Q&A via Claude API (idempotent)
+│   │   ├── mine_negatives.py       # hard negative mining via LanceDB (3 tiers)
+│   │   ├── false_negative_check.py # flag false negatives + train/eval split
+│   │   └── finetune.py             # SentenceTransformerTrainer + MNRL loss
+│   │
 │   ├── dashboard/                  # modular eval dashboard
 │   │   ├── __init__.py             # exports render_dashboard(results_dir, config_path)
 │   │   ├── app.py                  # standalone entry point
@@ -109,6 +131,7 @@ eval-driven-rag/
 │   │   │   ├── phase1.py           # Phase 1 retrieval charts + metrics
 │   │   │   ├── phase2.py           # Phase 2 generation charts + metrics
 │   │   │   ├── comparison.py       # config comparison tables + strategy comparison
+│   │   │   ├── model_comparison.py # leaderboard, MRR bar chart, quality-vs-cost scatter
 │   │   │   └── run_eval.py         # run Phase 1/Phase 2 eval forms
 │   │   └── utils/
 │   │       ├── data_loader.py      # JSON loading + schema validation
@@ -335,6 +358,58 @@ render_dashboard(results_dir="eval/results", config_path="config.yaml")
 
 ---
 
+## Embedding Model Benchmark
+
+A systematic comparison of 8 embedding models — 3 open-source HuggingFace models (base + fine-tuned) and 2 OpenAI API models — evaluated at `chunk_size=512` on Hit@5, MRR, and Recall@5.
+
+### Results (on technical PDF corpus)
+
+| Rank | Model | Source | Fine-tuned | Hit@5 | MRR | Recall@5 | Cost/1k |
+|---|---|---|---|---|---|---|---|
+| 🥇 1 | bge-small-en-v1.5-finetuned | local | ✓ | 0.9500 | **0.8211** | 0.9500 | $0 |
+| 2 | bge-base-en-v1.5-finetuned | local | ✓ | 0.9500 | 0.8111 | 0.9500 | $0 |
+| 3 | BAAI/bge-base-en-v1.5 | local | | 0.9167 | 0.8006 | 0.9167 | $0 |
+| 4 | all-MiniLM-L6-v2-finetuned | local | ✓ | 0.9333 | 0.7950 | 0.9333 | $0 |
+| 5 | text-embedding-3-small | openai | | 0.9333 | 0.7831 | 0.9333 | $0.00002 |
+| 6 | text-embedding-3-large | openai | | 0.9500 | 0.7761 | 0.9500 | $0.00013 |
+| 7 | BAAI/bge-small-en-v1.5 | local | | 0.9000 | 0.7719 | 0.9000 | $0 |
+| 8 | all-MiniLM-L6-v2 | local | | 0.8500 | 0.7289 | 0.8500 | $0 |
+
+> **Key finding:** Fine-tuned local models beat OpenAI API models on MRR (0.82 vs 0.78) at $0 inference cost.
+
+### How to run the benchmark
+
+```bash
+# Run all 8 models
+python -m scripts.run_benchmark
+
+# Skip fine-tuned models (base models only, no checkpoints needed)
+python -m scripts.run_benchmark --skip_finetuned
+
+# Single model
+python -m scripts.run_benchmark --model BAAI/bge-small-en-v1.5
+```
+
+Results are logged to `traces/experiment_log.jsonl` and visible in the **Model Comparison** tab of the dashboard.
+
+### Fine-tuning pipeline
+
+Fine-tuning uses domain-specific synthetic Q&A pairs generated from your corpus, with hard negative mining via LanceDB.
+
+```bash
+# Step 1 — generate synthetic Q&A pairs (Claude API, idempotent)
+# Step 2 — mine hard negatives (LanceDB, 3 tiers: very_hard/hard/medium)
+# Step 3 — flag false negatives + train/eval split
+python -m scripts.update_training_data
+
+# Step 4 — fine-tune all 3 HF models (GPU recommended — use Colab for M2 Macs)
+python -m src.training.finetune
+```
+
+Fine-tuned checkpoints are saved to `finetuned/{model-slug}-finetuned/`. Add `ANTHROPIC_API_KEY` to `.env` for Step 1.
+
+---
+
 ## Vector Store: FAISS vs LanceDB
 
 | | FAISS | LanceDB |
@@ -383,7 +458,11 @@ python -m src.eval.run_eval --qa_pairs data/eval/qa_pairs.json --k 5
 python -m src.eval_retrieval --name "baseline run"    # Phase 1: retrieval only (no LLM cost)
 python -m src.eval_generation --name "baseline run"   # Phase 2: generation quality (uses LLM)
 
-# 8. View results in the dashboard
+# 8. Run embedding model benchmark (compare 8 models)
+python -m scripts.run_benchmark --skip_finetuned      # base models only
+python -m scripts.run_benchmark                       # all 8 including fine-tuned
+
+# 9. View results in the dashboard
 bash run_dashboard.sh
 ```
 
@@ -403,15 +482,20 @@ See [`docs/design_decisions.md`](docs/design_decisions.md) for the full reasonin
 
 - [x] End-to-end RAG pipeline (ingest → retrieve → generate)
 - [x] FAISS vector store
+- [x] LanceDB vector store
 - [x] Streamlit UI
 - [x] Eval framework (recall@k, MRR, faithfulness)
 - [x] Two-phase eval system (retrieval + generation across chunk sizes)
 - [x] LLM response caching for eval runs
 - [x] EvalTrace integration (span tracing, latency, cost, SLO)
 - [x] Eval dashboard with strategy comparison and run naming
-- [ ] LanceDB vector store
+- [x] BaseEmbedder abstraction (HuggingFace + OpenAI)
+- [x] Fine-tuning pipeline (synthetic pairs → hard negatives → MNRL training)
+- [x] 8-model embedding benchmark with Model Comparison dashboard tab
+- [x] Colab fine-tuning notebook (M2 Mac OOM workaround)
 - [ ] BM25 + dense hybrid search
 - [ ] Cross-encoder reranker
+- [ ] Chunk size × embedding model grid search
 - [ ] File-level access control via metadata + permissions DB
 - [ ] Companion Substack post
 
