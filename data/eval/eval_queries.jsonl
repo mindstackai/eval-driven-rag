@@ -1,0 +1,60 @@
+{"question": "What is the arXiv identifier for the paper about training on classical and deploying on quantum systems?", "relevant_chunk_ids": [1]}
+{"question": "Who are the authors of the paper on scaling generative quantum machine learning to a thousand qubits?", "relevant_chunk_ids": [1]}
+{"question": "In what year was the arXiv paper on generative quantum machine learning scaling published?", "relevant_chunk_ids": [1]}
+{"question": "What does a MAPE value of 10 indicate about the relationship between predicted and actual scores?", "relevant_chunk_ids": [9]}
+{"question": "Under what conditions can MAPE become infinite or produce extraordinarily large percentage errors?", "relevant_chunk_ids": [9]}
+{"question": "According to the passage, what is the ideal value that MAPE should equal?", "relevant_chunk_ids": [9]}
+{"question": "What is the publication date of the Pearson article on lines and planes of closest fit to systems of points in space?", "relevant_chunk_ids": [16]}
+{"question": "In what journal was the Huang et al. paper on dimension reduction methods for transcriptomic data visualization published?", "relevant_chunk_ids": [16]}
+{"question": "What volume and issue number of Communications Biology contains the 2022 paper by Huang, Wang, Rudin, and Browne?", "relevant_chunk_ids": [16]}
+{"question": "What is the mathematical definition of calibration presented in the passage?", "relevant_chunk_ids": [18]}
+{"question": "If a model assigns a confidence of 0.6 to 100 predictions, how many of those predictions should be correct according to the calibration definition?", "relevant_chunk_ids": [18]}
+{"question": "Why can perfect calibration only be approximated in practice rather than achieved exactly?", "relevant_chunk_ids": [18]}
+{"question": "What machine learning algorithm is used to train the router in this hybrid model approach?", "relevant_chunk_ids": [23]}
+{"question": "At test time, what does the router decide between when processing each input?", "relevant_chunk_ids": [23]}
+{"question": "What type of architecture is created by having the router adaptively select between the primary and secondary expert models?", "relevant_chunk_ids": [23]}
+{"question": "What method is the passage based on?", "relevant_chunk_ids": [31]}
+{"question": "What two loss components are combined in a linear combination to create the total loss function?", "relevant_chunk_ids": [31]}
+{"question": "What does the total loss equation minimize according to the passage?", "relevant_chunk_ids": [31]}
+{"question": "What quantum machine learning architectures did Alami, Innan, Shafique, and Bennai compare for credit card fraud detection in 2024?", "relevant_chunk_ids": [50]}
+{"question": "What type of anomaly detection method did Pranji\u0107 and colleagues propose for noisy quantum processors according to the 2024 arXiv paper 2411.16970?", "relevant_chunk_ids": [50]}
+{"question": "Which authors are listed as co-authors on reference [36] in this bibliography?", "relevant_chunk_ids": [50]}
+{"question": "What is the dimensionality of each user vector in this implementation?", "relevant_chunk_ids": [63]}
+{"question": "How long did it take on average to calculate similar users for a single user?", "relevant_chunk_ids": [63]}
+{"question": "How many days would it take to compute the complete similarity matrix using simple calculation?", "relevant_chunk_ids": [63]}
+{"question": "What notation is used to represent the indicator function for proposition A in equation 14?", "relevant_chunk_ids": [66]}
+{"question": "How are hard predictions converted from probabilities using the thresholds mentioned in the passage?", "relevant_chunk_ids": [66]}
+{"question": "For which values of k are the hard predictions \u0177(k)\u1d62 calculated according to the passage?", "relevant_chunk_ids": [66]}
+{"question": "What cross-validation approach and configuration did the researchers use to evaluate their models?", "relevant_chunk_ids": [74]}
+{"question": "Which two metrics were used to measure model performance and how do they differ in their calculation methods?", "relevant_chunk_ids": [74]}
+{"question": "What statistical measures of the performance metrics were obtained across the cross-validation folds?", "relevant_chunk_ids": [74]}
+{"question": "What loss function is used to train the autoencoder model to reconstruct the original data from its encoded form?", "relevant_chunk_ids": [85]}
+{"question": "How is the reconstruction loss LR calculated according to the formula provided in the passage?", "relevant_chunk_ids": [85]}
+{"question": "What are the two main components of the autoencoder architecture described in this passage?", "relevant_chunk_ids": [85]}
+{"question": "How are the calibrated probabilities for each base model obtained in the training procedure?", "relevant_chunk_ids": [94]}
+{"question": "What is the purpose of the validation set in the training procedure described?", "relevant_chunk_ids": [94]}
+{"question": "On what data are the temperature parameters for the base models fitted?", "relevant_chunk_ids": [94]}
+{"question": "What volume and page numbers did the Jordan and Jacobs paper on hierarchical mixtures of experts and the EM algorithm appear in Neural Computation?", "relevant_chunk_ids": [98]}
+{"question": "In what year was the Tumer and Ghosh paper on error correlation and error reduction in ensemble classifiers published?", "relevant_chunk_ids": [98]}
+{"question": "Which journal published the paper on mixtures of local experts in volume 3, number 1, pages 79-87 in 1991?", "relevant_chunk_ids": [98]}
+{"question": "What type of neural network architecture does the passage indicate was used as a classification head in this work?", "relevant_chunk_ids": [101]}
+{"question": "In which three specific domains or applications does the passage mention that classification heads have been previously employed?", "relevant_chunk_ids": [101]}
+{"question": "According to the passage, what characteristic of feedforward neural networks made them significant in the history of deep learning?", "relevant_chunk_ids": [101]}
+{"question": "What are the three types of times measured for Oxford Quantum Circuits Toshiko hardware in Table V?", "relevant_chunk_ids": [105]}
+{"question": "How many folds and repeats were used in the cross validation procedure described in Table III?", "relevant_chunk_ids": [105]}
+{"question": "What is the median recall value achieved by the XGBoost baseline model according to Table III?", "relevant_chunk_ids": [105]}
+{"question": "What specific individuals from OQC are thanked for their contributions to building cloud infrastructure?", "relevant_chunk_ids": [106]}
+{"question": "What two strategies are proposed for improving gating systems in the context of this work?", "relevant_chunk_ids": [106]}
+{"question": "How can data complexities be utilized according to the passage's discussion of quantum machine learning models?", "relevant_chunk_ids": [106]}
+{"question": "What is the name of the original architecture that the presented model is based upon?", "relevant_chunk_ids": [111]}
+{"question": "How does the custom hybrid quantum-classical architecture relate to the original framework proposed by Beliset al.?", "relevant_chunk_ids": [111]}
+{"question": "What are the main constraints affecting practical deployment of quantum-classical techniques mentioned in the passage?", "relevant_chunk_ids": [111]}
+{"question": "What advantages do quantum machine learning models offer regarding generalization and feature space handling in fraud detection?", "relevant_chunk_ids": [129]}
+{"question": "How can hybrid quantum and classical frameworks contribute to making fraud detection systems more scalable and adaptive?", "relevant_chunk_ids": [129]}
+{"question": "What capability may quantum algorithms provide in distinguishing between legitimate and fraudulent behaviors according to the passage?", "relevant_chunk_ids": [129]}
+{"question": "What is the average recall score and standard deviation for XGBoost according to Table IV?", "relevant_chunk_ids": [132]}
+{"question": "How does the average recall of the model with a 0.9 router threshold compare to the model with a 0.5 router threshold?", "relevant_chunk_ids": [132]}
+{"question": "What median recall value is consistently achieved across all variants of this model with different router thresholds?", "relevant_chunk_ids": [132]}
+{"question": "What is the title of the paper authored by M. Weber, D. Wierichs, R. Wiersema, and others?", "relevant_chunk_ids": [134]}
+{"question": "Who are the authors listed in this bibliographic reference along with M. Weber and D. Wierichs?", "relevant_chunk_ids": [134]}
+{"question": "What is the arXiv identifier and publication year for the PennyLane paper?", "relevant_chunk_ids": [134]}

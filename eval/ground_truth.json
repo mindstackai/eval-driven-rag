@@ -2,61 +2,61 @@
   {
     "question": "What is the average precision score of the hybrid quantum model compared to XGBoost in the fraud detection study?",
     "expected_chunk_ids": [
-      "data/raw/2603.06473v1.pdf:p0:c2:7b36109b",
-      "data/raw/2603.06473v1.pdf:p6:c52:d6e3de82"
+      "data/raw/2603.06473v1.pdf:p0:c3:62f9688c",
+      "data/raw/2603.06473v1.pdf:p6:c95:40e66604"
     ],
     "expected_answer": "The hybrid quantum-classical architecture achieves average precision scores of 0.793 compared to 0.770 of XGBoost on 3 repeated 5-fold cross-validation benchmarks."
   },
   {
     "question": "What dataset was used for the credit card fraud detection experiments?",
     "expected_chunk_ids": [
-      "data/raw/2603.06473v1.pdf:p5:c44:9c622ab1"
+      "data/raw/2603.06473v1.pdf:p5:c73:1fc83482"
     ],
     "expected_answer": "A publicly available European credit card fraud dataset of transactions from September 2013 by European cardholders was used."
   },
   {
     "question": "What encoding method is used to map classical data into the quantum circuit?",
     "expected_chunk_ids": [
-      "data/raw/2603.06473v1.pdf:p2:c19:3a901645",
-      "data/raw/2603.06473v1.pdf:p2:c21:0fa5d563"
+      "data/raw/2603.06473v1.pdf:p2:c34:1e072895",
+      "data/raw/2603.06473v1.pdf:p1:c25:c0296d6a"
     ],
     "expected_answer": "Angle encoding is used, where rotations on the Y-axis of qubits encode the features of the data into quantum space."
   },
   {
     "question": "What is the role of the router in the Mixture-of-Experts fraud detection framework?",
     "expected_chunk_ids": [
-      "data/raw/2603.06473v1.pdf:p4:c37:77cb2d20",
-      "data/raw/2603.06473v1.pdf:p5:c43:91141b8f"
+      "data/raw/2603.06473v1.pdf:p4:c66:31eb6b52",
+      "data/raw/2603.06473v1.pdf:p4:c63:f68bd01c"
     ],
     "expected_answer": "The router (an XGBoost classifier) dynamically decides for each input whether to use the primary classical model or the secondary quantum model, based on a user-controlled threshold parameter."
   },
   {
     "question": "What algorithms are used for movie recommendation in the Netflix study?",
     "expected_chunk_ids": [
-      "data/raw/2602.24125v1.pdf:p5:c105:c88cba6b",
-      "data/raw/2602.24125v1.pdf:p0:c90:f32bc032"
+      "data/raw/2602.24125v1.pdf:p1:c155:2457b8a1",
+      "data/raw/2602.24125v1.pdf:p3:c169:39f4bf99"
     ],
     "expected_answer": "XGBoost regression, K-Nearest Neighbors, and Matrix Factorization (MF) algorithms from Python's Surprise library are used, along with collaborative filtering techniques."
   },
   {
     "question": "How is user-user similarity computed in the movie recommendation system?",
     "expected_chunk_ids": [
-      "data/raw/2602.24125v1.pdf:p9:c114:d9d7d4e5"
+      "data/raw/2602.24125v1.pdf:p8:c189:19cdc54f"
     ],
     "expected_answer": "A user-user similarity matrix of size nXn is computed where n is the number of users, using cosine similarity to determine how similar users are based on their rating patterns."
   },
   {
     "question": "What was the Netflix Challenge prize and its goal?",
     "expected_chunk_ids": [
-      "data/raw/2602.24125v1.pdf:p1:c95:a0860c46"
+      "data/raw/2602.24125v1.pdf:p1:c160:df2b36dc"
     ],
     "expected_answer": "Netflix organized a competition on Kaggle.com with a prize of $1 million for improving recommendation accuracy by 10%."
   },
   {
     "question": "What evaluation metric is used to compare recommendation algorithm performance?",
     "expected_chunk_ids": [
-      "data/raw/2602.24125v1.pdf:p13:c124:72c7329e",
-      "data/raw/2602.24125v1.pdf:p13:c125:f970e48e"
+      "data/raw/2602.24125v1.pdf:p12:c204:79b6bc87",
+      "data/raw/2602.24125v1.pdf:p12:c203:495759bb"
     ],
     "expected_answer": "Root Mean Square Error (RMSE) and Mean Absolute Percentage Error (MAPE) are used to evaluate and compare the recommendation algorithms."
   }

@@ -165,7 +165,7 @@ class LanceDBStore:
         if table is None:
             raise RuntimeError("No table found. Call add_documents() first.")
 
-        query = table.search(query_embedding).limit(k)
+        query = table.search(query_embedding).metric("cosine").limit(k)
 
         if filters:
             clauses = []
@@ -188,9 +188,9 @@ class LanceDBStore:
         output = []
         for row in results:
             row = dict(row)
-            # LanceDB returns L2 distance by default; convert to a similarity-ish score
+            # cosine metric: distance in [0, 1], so sim = 1 - distance
             distance = row.pop("_distance", None)
-            row["score"] = 1.0 / (1.0 + distance) if distance is not None else None
+            row["score"] = 1.0 - distance if distance is not None else None
             output.append(row)
 
         return output

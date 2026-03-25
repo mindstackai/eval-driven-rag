@@ -21,7 +21,45 @@ profiles:
     chunking_strategy: sentence
 embedding:
   mode: auto
-  batch_size: 100
+  batch_size: 32
+  normalize_embeddings: true
+  models:
+    - name: "sentence-transformers/all-MiniLM-L6-v2"
+      source: local
+      dim: 384
+    - name: "BAAI/bge-small-en-v1.5"
+      source: local
+      dim: 384
+    - name: "BAAI/bge-base-en-v1.5"
+      source: local
+      dim: 768
+    - name: "text-embedding-3-small"
+      source: openai
+      dim: 1536
+      cost_per_1k_tokens: 0.00002
+    - name: "text-embedding-3-large"
+      source: openai
+      dim: 3072
+      cost_per_1k_tokens: 0.00013
+
+  finetuned_models:
+    - name: "./finetuned/bge-small-en-v1-5-finetuned"
+      source: local
+      base_model: "BAAI/bge-small-en-v1.5"
+      dim: 384
+    - name: "./finetuned/bge-base-en-v1-5-finetuned"
+      source: local
+      base_model: "BAAI/bge-base-en-v1.5"
+      dim: 768
+    - name: "./finetuned/all-minilm-l6-v2-finetuned"
+      source: local
+      base_model: "sentence-transformers/all-MiniLM-L6-v2"
+      dim: 384
+
+device: mps          # mps | cuda | cpu — auto-detected at runtime
+incremental:
+  enabled: true
+  tracker_path: ./vectorstore/document_tracker.json
 slo:
   e2e_p95_ms: 5000
   retriever_p95_ms: 500
@@ -40,3 +78,17 @@ eval:
 lancedb:
   db_path: ./vectorstore/lancedb
   table_name: documents
+
+training:
+  queries_per_chunk: 3
+  coverage_ratio: 0.6
+  eval_split: 0.15
+  hard_negative_tiers:
+    very_hard_threshold: 0.75
+    hard_threshold: 0.55
+    medium_threshold: 0.35
+  false_negative_threshold: 0.92
+  epochs: 3
+  batch_size: 16
+  learning_rate: 2.0e-5
+  warmup_ratio: 0.1
