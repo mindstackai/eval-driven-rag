@@ -4,10 +4,7 @@ langchain-community>=0.2.0
 langchain-openai>=0.1.0
 langchain-huggingface>=0.0.3
 
-# Vector search
-faiss-cpu>=1.7.4
-
-# LanceDB (alternative vector store)
+# Vector store
 lancedb>=0.3.0
 
 # Embeddings (local + OpenAI fallback)

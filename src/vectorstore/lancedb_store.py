@@ -6,9 +6,15 @@ file-level access control: store ``allowed_roles`` in each chunk's metadata
 and pass ``{"allowed_roles": "admin"}`` (or similar) at query time to restrict
 results to chunks the requesting user is permitted to see.
 """
+import json
 from typing import Any
 
 import numpy as np
+
+# Fixed schema columns written as top-level LanceDB fields.
+# Any metadata key NOT in this set is serialised into `extra_metadata` (JSON
+# string) so that varying PDF metadata never breaks the schema on append.
+_CORE_COLUMNS = {"source", "page", "allowed_roles", "chunk_id", "ingest_source", "ingest_date"}
 
 
 class LanceDBStore:
@@ -76,15 +82,57 @@ class LanceDBStore:
         if len(chunks) != len(embeddings) or len(chunks) != len(metadatas):
             raise ValueError("chunks, embeddings, and metadatas must have the same length.")
 
+        def _normalize(meta: dict) -> dict:
+            """Return a row dict with a fixed schema.
+
+            Core columns (source, page, allowed_roles, chunk_id,
+            ingest_source, ingest_date) are promoted to top-level fields.
+            Everything else — including arbitrary PDF metadata like
+            'moddate', 'ptex.fullbanner', etc. — is packed into
+            ``extra_metadata`` as a JSON string so the schema never varies
+            between files.
+            """
+            core = {}
+            extra = {}
+            for k, v in meta.items():
+                # Normalise key: replace dots (LanceDB forbids them in column names)
+                norm_key = k.replace(".", "_")
+                if norm_key in _CORE_COLUMNS:
+                    core[norm_key] = v
+                else:
+                    extra[norm_key] = v
+            core["extra_metadata"] = json.dumps(extra) if extra else "{}"
+            return core
+
         rows = [
-            {"text": text, "vector": emb, **meta}
+            {"text": text, "vector": emb, **_normalize(meta)}
             for text, emb, meta in zip(chunks, embeddings, metadatas)
         ]
 
         db = self._open_db()
         if self.table_name in db.table_names():
-            self._table = db.open_table(self.table_name)
-            self._table.add(rows)
+            tbl = db.open_table(self.table_name)
+            existing_cols = set(tbl.schema.names)
+            # Only guard for extra_metadata — it is always written by _normalize()
+            # and its absence means the table was created with an old schema.
+            # Core columns (source, page, etc.) are optional and may be absent
+            # in test fixtures or minimal ingests.
+            missing = {"extra_metadata"} - existing_cols
+            if missing:
+                # Schema is stale (e.g. created before extra_metadata was added).
+                # Drop and recreate so the new schema takes effect.
+                import warnings
+                warnings.warn(
+                    f"Table '{self.table_name}' is missing columns {missing}. "
+                    "Dropping and recreating with the current schema. "
+                    "Re-run ingest to repopulate.",
+                    stacklevel=2,
+                )
+                db.drop_table(self.table_name)
+                self._table = db.create_table(self.table_name, data=rows)
+            else:
+                self._table = tbl
+                self._table.add(rows)
         else:
             self._table = db.create_table(self.table_name, data=rows)
 
@@ -93,6 +141,7 @@ class LanceDBStore:
         query_embedding: list[float],
         k: int,
         filters: dict = None,
+        prefilter: bool = False,
     ) -> list[dict]:
         """
         Return the top-k most similar chunks for *query_embedding*.
@@ -100,10 +149,13 @@ class LanceDBStore:
         Args:
             query_embedding: Embedding vector of the query.
             k: Number of results to return.
-            filters: Optional metadata filters applied before ranking.
-                     Example: ``{"allowed_roles": "analyst"}`` restricts
-                     results to chunks whose ``allowed_roles`` field matches.
-                     Supports equality checks on scalar metadata fields.
+            filters: Optional metadata filters.
+                     Scalar value  → equality check:  ``{"allowed_roles": "analyst"}``
+                     List value    → IN check:         ``{"allowed_roles": ["analyst", "public"]}``
+            prefilter: When True, the WHERE clause is applied *before* ANN search
+                       (better for high-selectivity roles like admin/exec that match
+                       very few chunks).  When False (default), filtering happens
+                       after ANN candidate retrieval.
 
         Returns:
             List of dicts, each containing at least ``text``, ``score``,
@@ -116,11 +168,19 @@ class LanceDBStore:
         query = table.search(query_embedding).metric("cosine").limit(k)
 
         if filters:
-            filter_clauses = " AND ".join(
-                f"{key} = '{value}'" if isinstance(value, str) else f"{key} = {value}"
-                for key, value in filters.items()
-            )
-            query = query.where(filter_clauses)
+            clauses = []
+            for key, value in filters.items():
+                if isinstance(value, list):
+                    quoted = ", ".join(
+                        f"'{v}'" if isinstance(v, str) else str(v) for v in value
+                    )
+                    clauses.append(f"{key} IN ({quoted})")
+                elif isinstance(value, str):
+                    clauses.append(f"{key} = '{value}'")
+                else:
+                    clauses.append(f"{key} = {value}")
+            filter_str = " AND ".join(clauses)
+            query = query.where(filter_str, prefilter=prefilter)
 
         results = query.to_list()
 

@@ -1,49 +1,63 @@
 import streamlit as st
 from dotenv import load_dotenv
-load_dotenv()  # load .env for OPENAI_API_KEY, PYTHONPATH etc.
+load_dotenv()
 
-from src.embed_store import load_faiss
 from src.config_manager import get_config
+from src.retriever import get_retriever
 from src.tracing import traced_base_answer, traced_helper_answer, traced_strict_rag_answer
 from langchain_openai import ChatOpenAI
 
-# ---------------------------------------------------------
-# Setup
-# ---------------------------------------------------------
 st.set_page_config(page_title="Fleet Insights RAG", layout="wide")
 st.title("RAG Research Assistant")
 
-# Load configuration
 config = get_config()
 
-# Show embedding mode
-st.sidebar.markdown("### Configuration")
-st.sidebar.info(f"**Embedding Mode:** {config.embedding_mode}")
-st.sidebar.info(f"**Incremental:** {'Enabled' if config.is_incremental_enabled() else 'Disabled'}")
+# ── Sidebar: identity & access ─────────────────────────────────────────────
+st.sidebar.markdown("### Identity")
+user_id = st.sidebar.text_input(
+    "User ID",
+    value="",
+    placeholder="e.g. alice, bob, carol",
+    help="Leave blank for unrestricted access. Roles are configured in roles.yaml.",
+)
 
-# Load FAISS retriever
-db = load_faiss()
-if db is None:
+from src.auth import get_user_role, get_user_roles, list_users
+
+if user_id:
+    assigned_role = get_user_role(user_id)
+    expanded_roles = get_user_roles(user_id)
+
+    role_colour = {"admin": "🔴", "analyst": "🟡", "public": "🟢"}.get(assigned_role, "⚪")
+    st.sidebar.markdown(
+        f"**{role_colour} {user_id}** — `{assigned_role}`\n\n"
+        f"Can read: {' · '.join(f'`{r}`' for r in expanded_roles)}"
+    )
+else:
+    st.sidebar.info("No user — unrestricted access (all chunks visible).")
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### Configuration")
+st.sidebar.info(f"**Embedding:** {config.embedding_mode}")
+
+# ── Load retriever ─────────────────────────────────────────────────────────
+try:
+    retriever = get_retriever(user_id=user_id or None)
+except RuntimeError:
     st.error(
-        "No FAISS index found. Please ingest documents first by running:\n\n"
-        "`python -m src.ingest`"
+        "No LanceDB index found. Ingest documents first:\n\n"
+        "`python -m src.ingest`  or use the **Admin UI**."
     )
     st.stop()
-retriever = db.as_retriever(search_kwargs={"k": config.get("top_k", 3)})
 
-# LLM
 llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-# ---------------------------------------------------------
-# UI
-# ---------------------------------------------------------
 query = st.text_input("Ask a question about your documents:")
 
 mode = st.radio(
     "Choose mode:",
     ["No-RAG", "Helper-RAG", "Strict-RAG"],
-    index=1,  # default Helper
-    horizontal=True
+    index=1,
+    horizontal=True,
 )
 
 if query:
@@ -65,5 +79,9 @@ if query:
     if result["sources"]:
         st.subheader("Sources")
         for i, doc in enumerate(result["sources"], 1):
-            st.markdown(f"**{i}.** File: `{doc.metadata.get('source')}` | Page: {doc.metadata.get('page')}")
+            role = doc.metadata.get("allowed_roles", "?")
+            role_badge = {"admin": "🔴 admin", "analyst": "🟡 analyst", "public": "🟢 public"}.get(role, f"⚪ {role}")
+            source = doc.metadata.get("source", "unknown")
+            page = doc.metadata.get("page", "?")
+            st.markdown(f"**{i}.** `{source}` | Page {page} | {role_badge}")
             st.caption(doc.page_content[:300] + "...")
