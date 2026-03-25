@@ -21,13 +21,18 @@ pypdf>=4.2.0
 tiktoken>=0.7.0
 python-dotenv>=1.0.1
 PyYAML
+anthropic>=0.20.0
 
 # UI
 streamlit>=1.36.0
 
 # Data analysis
-numpy>=1.24.0
+numpy<2.0                  # NumPy 2.x breaks sentence-transformers
 pandas
+scikit-learn>=1.4.0        # k-means for chunk coverage selection
+datasets>=2.19.0
+accelerate>=1.1.0
+pyarrow>=14.0.0            # required by LanceDB for schema definition
 
 # EvalTrace (span-level observability & evaluation)
 -e /Users/ywchen/projects/mindstackai/EvalTrace
