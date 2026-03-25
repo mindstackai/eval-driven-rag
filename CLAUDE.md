@@ -14,6 +14,15 @@
 - `python -m src.eval_retrieval`   # Phase 1: retrieval eval across chunk sizes (no LLM)
 - `python -m src.eval_generation`  # Phase 2: generation eval on top configs (uses LLM)
 
+## Running the Benchmark
+- `python -m scripts.run_benchmark`               # all 8 models
+- `python -m scripts.run_benchmark --skip_finetuned`  # base models only
+- `python -m scripts.run_benchmark --model BAAI/bge-small-en-v1.5`  # single model
+
+## Fine-tuning Pipeline
+- `python -m scripts.update_training_data`   # Steps 1-3: pairs → negatives → train/eval split
+- `python -m src.training.finetune`          # Step 4: fine-tune all 3 HF models
+
 ## Environment
 - Use `.venv` — activate with `source .venv/bin/activate`
-- Copy `.env.example` → `.env` and add `OPENAI_API_KEY`
+- Copy `.env.example` → `.env` and add `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`
