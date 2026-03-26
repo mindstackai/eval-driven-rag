@@ -2,6 +2,7 @@ chunk_size: 512
 chunk_overlap: 120
 chunking_strategy: recursive
 top_k: 3
+index_path: ./vectorstore/faiss_index_512
 profiles:
   general:
     chunk_size: 800
@@ -77,7 +78,7 @@ eval:
   results_dir: eval/results/
 lancedb:
   db_path: ./vectorstore/lancedb
-  table_name: documents
+  table_name: fleet_chunks
 
 training:
   queries_per_chunk: 3
@@ -89,6 +90,6 @@ training:
     medium_threshold: 0.35
   false_negative_threshold: 0.92
   epochs: 3
-  batch_size: 16
+  batch_size: 4
   learning_rate: 2.0e-5
   warmup_ratio: 0.1
